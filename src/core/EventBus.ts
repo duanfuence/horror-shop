@@ -33,6 +33,16 @@ export interface GameEvents {
   'shift:end': { endingId: string };
   /** Игра поставлена на паузу/снята с паузы (меню, скрытая вкладка, реклама). */
   'pause': { paused: boolean; reason: string };
+  /** Персонаж говорит (анимация рта). */
+  'speaking': { who: string | null; on: boolean };
+  /** Касса: товары на прилавке, пробитый товар, очистка. */
+  'sale:items': { items: { key: string; icon: string }[] };
+  'sale:scan': { key: string };
+  'sale:clear': void;
+  /** Текст на дисплее кассы (две строки). */
+  'register:display': { top: string; bottom: string } | null;
+  /** Камеры открыты/закрыты, выбрана камера. */
+  'cctv': { cam: number | null };
 }
 
 type Handler<T> = (payload: T) => void;
