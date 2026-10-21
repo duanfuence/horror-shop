@@ -95,6 +95,11 @@ button {
   display: none;
 }
 
+#app.cctv-open .clock,
+#app.cctv-open .tasks {
+  display: none;
+}
+
 #app.portrait #stage-wrap {
   left: 0;
   top: 0;
@@ -137,7 +142,7 @@ button {
   position: absolute;
   right: calc(var(--u) * 1.2);
   top: calc(var(--u) * 1.2);
-  max-width: 40%;
+  max-width: 28%;
   background: rgba(6, 9, 9, 0.8);
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -290,8 +295,8 @@ button {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 36%;
-  width: min(88%, 40em);
+  top: calc(var(--u) * 1.2);
+  width: min(42%, 30em);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -301,7 +306,8 @@ button {
 }
 
 .toast {
-  pointer-events: auto;
+  pointer-events: none;
+  font-size: 0.9em;
   background: rgba(6, 8, 8, 0.9);
   border-left: 3px solid var(--insight);
   padding: 0.45em 0.8em;
@@ -338,6 +344,7 @@ button {
   position: absolute;
   left: 0;
   right: 0;
+  top: 0;
   bottom: 0;
   pointer-events: none;
   z-index: 4;
@@ -352,7 +359,7 @@ button {
   left: calc(var(--u) * 1.5);
   right: calc(var(--u) * 1.5);
   bottom: calc(var(--u) * 1.2);
-  max-height: 46%;
+  max-height: 40%;
   overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -434,7 +441,7 @@ button {
   gap: 0.5em;
 }
 
-.dialog .prompt.phone::before {
+.dialog .prompt.style-phone::before {
   content: '';
   width: 0.7em;
   height: 0.7em;
@@ -444,7 +451,7 @@ button {
   flex: none;
 }
 
-.dialog .prompt.door::before {
+.dialog .prompt.style-door::before {
   content: '▮';
   color: var(--danger);
   animation: blink 0.9s infinite;
@@ -736,6 +743,17 @@ button {
 }
 
 #overlays > * {
+  pointer-events: auto;
+}
+
+#modals {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+#modals > * {
   pointer-events: auto;
 }
 
@@ -1050,7 +1068,7 @@ button {
   left: 50%;
   top: calc(var(--u) * 1.5);
   transform: translateX(-50%);
-  max-height: calc(var(--stage-h) * 0.6);
+  max-height: calc(var(--stage-h) * 0.55);
   overflow-y: auto;
   animation: paper-in 0.4s ease-out;
   z-index: 3;
@@ -1100,7 +1118,7 @@ button {
 
 .rules-paper {
   width: min(34em, 92vw);
-  font-size: 0.92em;
+  font-size: 0.86em;
 }
 
 /* камеры */
@@ -1457,10 +1475,19 @@ button {
   --fs: 15px;
 }
 
+#app.portrait #stage-wrap {
+  overflow: visible;
+}
+
+#app.portrait #stage {
+  overflow: hidden;
+}
+
 #app.portrait #dock {
   position: absolute;
   top: calc(var(--stage-h) + 56px);
-  bottom: 0;
+  bottom: auto;
+  height: calc(var(--app-h) - var(--stage-h) - 56px);
   left: 0;
   right: 0;
 }
@@ -1474,6 +1501,10 @@ button {
   top: auto;
   width: auto;
   max-height: calc(100% - 16px);
+}
+
+#app.portrait .dialog {
+  max-height: 46%;
 }
 
 #app.portrait .register.show + .dialog.show {
@@ -1524,13 +1555,18 @@ button {
 
 #app.portrait .paper-wrap {
   position: fixed;
-  top: 8px;
-  max-height: calc(var(--stage-h) + 40px);
+  top: calc(var(--stage-h) + 58px);
+  max-height: calc((var(--app-h) - var(--stage-h) - 56px) * 0.5);
+}
+
+#app.portrait.cctv-open .tools {
+  display: none;
 }
 
 #app.portrait #toasts {
   position: fixed;
   bottom: auto;
+  width: calc(100% - 16px);
   top: calc(var(--stage-h) - 8px);
   transform: translate(-50%, -100%);
 }
@@ -1543,6 +1579,10 @@ button {
 
 #app.portrait .modal-backdrop {
   padding: 8px;
+}
+
+#app.in-menu #stage-wrap {
+  filter: brightness(0.75);
 }
 
 @media (hover: none) {

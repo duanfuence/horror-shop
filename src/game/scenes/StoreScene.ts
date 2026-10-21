@@ -46,7 +46,7 @@ const HOTSPOTS: { id: HotspotId; label: string; rect: [number, number, number, n
   { id: 'register', label: 'Касса', rect: [232, 104, 77, 58] },
 ];
 
-const CUSTOMER_X = 172;
+const CUSTOMER_X = 146;
 
 export class StoreScene extends Phaser.Scene {
   private deps: StoreDeps;
@@ -274,9 +274,9 @@ export class StoreScene extends Phaser.Scene {
   private showItems(items: { key: string; icon: string }[]): void {
     this.clearItems();
     const n = items.length;
-    const span = Math.min(78, n * 15);
+    const span = Math.min(50, (n - 1) * 13);
     items.forEach((it, i) => {
-      const x = 186 - span / 2 + (n > 1 ? (i * span) / (n - 1) : span / 2);
+      const x = 180 - span / 2 + (n > 1 ? (i * span) / (n - 1) : span / 2);
       const img = this.add.image(Math.round(x), 160, `icon:${it.icon}`).setOrigin(0.5, 1).setDepth(D.items).setAlpha(0);
       this.tweens.add({ targets: img, alpha: 1, y: 158, duration: 200, delay: i * 70 });
       this.items.set(it.key, img);
@@ -311,7 +311,7 @@ export class StoreScene extends Phaser.Scene {
   private drawVfd(): void {
     if (!this.vfdTex) return;
     const s = this.deps.session();
-    const top = this.display?.top ?? (this.mode === 'game' ? 'КАССА СВОБОДНА' : 'КОЛОСОК');
+    const top = this.display?.top ?? (this.mode === 'game' ? 'КАССА' : 'КОЛОСОК');
     const bottom = this.display?.bottom ?? (this.mode === 'game' ? s.clockText() : '24 ЧАСА');
     const key = `${top}|${bottom}`;
     if (key === this.lastVfd) return;

@@ -131,7 +131,7 @@ export class Dialog {
     if (this.revealing) this.finishReveal();
     this.moreEl.style.display = 'none';
     this.advance = null;
-    this.promptEl.className = `prompt ${req.style}`;
+    this.promptEl.className = `prompt style-${req.style}`;
     this.promptEl.textContent = req.prompt ?? '';
     this.promptEl.style.display = req.prompt ? '' : 'none';
     clear(this.choicesEl);

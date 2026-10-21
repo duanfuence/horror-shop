@@ -90,8 +90,9 @@ export class UI implements Presenter {
       dock,
       this.overlays,
     );
-    this.app = h('div', { id: 'app' }, this.stageWrap, this.screens);
-    this.modals = new ModalHost(this.overlays);
+    const modalRoot = h('div', { id: 'modals' });
+    this.app = h('div', { id: 'app' }, this.stageWrap, this.screens, modalRoot);
+    this.modals = new ModalHost(modalRoot);
   }
 
   /** Подключить сессию и сцену. Вызывается один раз при старте. */
@@ -157,6 +158,7 @@ export class UI implements Presenter {
     }
     this.app.style.setProperty('--stage-w', `${w}px`);
     this.app.style.setProperty('--stage-h', `${hgt}px`);
+    this.app.style.setProperty('--app-h', `${vh}px`);
     this.app.classList.toggle('portrait', this.portrait);
     this.app.classList.toggle('landscape', !this.portrait);
   }
@@ -454,6 +456,7 @@ export class UI implements Presenter {
     if (this.cams.isOpen) return;
     this.session.openCameras();
     this.overlays.append(this.cams.el);
+    this.app.classList.add('cctv-open');
     this.audio.play('static');
     this.switchCam(this.lastCam);
   }
@@ -472,6 +475,7 @@ export class UI implements Presenter {
   private closeCameras(): void {
     if (!this.cams?.isOpen) return;
     this.cams.el.remove();
+    this.app.classList.remove('cctv-open');
     this.stage.closeCctv();
     this.bus.emit('cctv', { cam: null });
     this.session.closeCameras();

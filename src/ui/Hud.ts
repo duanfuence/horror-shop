@@ -86,6 +86,7 @@ export class Hud {
   }
 
   toast(text: string, ms?: number): void {
+    for (const el of Array.from(this.toasts.children)) if (el.textContent === text && !el.classList.contains('out')) return;
     const t = h('div', { class: 'toast', role: 'status', text });
     const life = ms ?? Math.min(9000, 3200 + text.length * 45);
     const kill = () => {
@@ -94,7 +95,7 @@ export class Hud {
     };
     t.addEventListener('click', kill);
     this.toasts.append(t);
-    while (this.toasts.children.length > 3) this.toasts.firstElementChild?.remove();
+    while (this.toasts.children.length > 2) this.toasts.firstElementChild?.remove();
     window.setTimeout(kill, life);
   }
 

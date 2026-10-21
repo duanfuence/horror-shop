@@ -77,7 +77,7 @@ function darkFigure(): HTMLCanvasElement {
   const c = document.createElement('canvas');
   c.width = fig.width;
   c.height = fig.height;
-  const ctx = c.getContext('2d')!;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
   ctx.drawImage(fig, 0, 0);
   const d = ctx.getImageData(0, 0, c.width, c.height);
   for (let i = 0; i < d.data.length; i += 4) {

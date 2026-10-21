@@ -850,7 +850,7 @@ export const CHARACTER_SPECS: Record<string, CharSpec> = {
 export function paintSilhouette(spec: CharSpec, light = '#2a3134'): HTMLCanvasElement {
   const src = paintCharacter(spec);
   const pc = new PixelCanvas(CHAR_W, CHAR_H);
-  const d = src.getContext('2d')!.getImageData(0, 0, CHAR_W, CHAR_H).data;
+  const d = src.getContext('2d', { willReadFrequently: true })!.getImageData(0, 0, CHAR_W, CHAR_H).data;
   for (let i = 0; i < CHAR_W * CHAR_H; i++) {
     if (d[i * 4 + 3] === 0) continue;
     const l = (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 765;
