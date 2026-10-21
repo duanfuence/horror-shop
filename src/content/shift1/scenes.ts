@@ -61,6 +61,12 @@ function normalAfter(s: WorldState, r: SaleResult): void {
   }
 }
 
+/**
+ * Улики-противоречия «запись против того, что было»: камера показала то, чего не было, или не показала то, что было.
+ * Две любые — и утром Г. П. говорит «Записи врут» (docs/story-audit.md, С-10).
+ */
+export const RECORD_CONTRADICTIONS = ['archive_door', 'archive_figure', 'archive_entry', 'cam1_self', 'cam_0558', 'cam3_empty', 'relief_no_cam'];
+
 /** Серьёзные нарушения: два любых — увольнение, как бы хорошо ни прошла остальная смена. */
 export const SERIOUS_VIOLATIONS = ['alcohol', 'door_open', 'cam4_off'];
 export const seriousViolations = (s: WorldState): number =>
@@ -515,6 +521,18 @@ export const scenes: Record<string, Step[]> = {
     say('liza', 'Я подошла — а стекло изнутри всё в инее. Изнутри, понимаете?'),
     fx(clue('liza_truck')),
     choice([
+      opt(
+        'Фургон стоит у входа. Он есть на камере.',
+        [
+          say('liza', 'У входа? Нет. У чёрного хода, у ворот склада. Я сзади шла, там к остановке короче.'),
+          narr('Она смотрит на монитор камер. Потом — на служебную дверь.'),
+          say('liza', 'Тогда что стоит у входа?'),
+          when(hasClue('liza_window'), [say('liza', 'Как тогда с Костей. В окне склада — и за кассой. В одну минуту.')]),
+          say('liza', 'Вы только дверь им не открывайте, ладно?'),
+          fx(set('lizaTruckTwice')),
+        ],
+        { if: hasClue('truck_cam'), tone: 'insight' },
+      ),
       opt('Спасибо, что сказали.', [say('liza', 'Вы только дверь им не открывайте, ладно? Мало ли.')]),
       opt('Ночью тут бывает всякое.', [say('liza', 'Ага… Ладно. Побегу, пока фонари горят.')]),
     ]),
@@ -556,6 +574,11 @@ export const scenes: Record<string, Step[]> = {
         opt(
           'Ночью поставок не бывает.',
           [
+            // Если основание — только дата на ленте, игрок должен видеть, на что он опирается.
+            when(
+              (s) => s.clues.includes('fax_order') && !['gp_verified', 'liza_truck', 'door_nobody', 'truck_cam'].some((c) => s.clues.includes(c)),
+              [narr('Распоряжение про хлеб в 03:40 — с датой трёхлетней давности. А в памятке: «Ночью поставок не бывает».')],
+            ),
             voice('door', '…'),
             narr('Пауза. Потом — тихо, вашим собственным голосом, с вашей интонацией:'),
             voice('door', 'Ночью поставок не бывает.'),
@@ -564,7 +587,7 @@ export const scenes: Record<string, Step[]> = {
           ],
           {
             tone: 'insight',
-            if: any(hasClue('gp_verified'), hasClue('liza_truck'), hasClue('door_nobody'), hasClue('truck_cam')),
+            if: any(hasClue('gp_verified'), hasClue('liza_truck'), hasClue('door_nobody'), hasClue('truck_cam'), hasClue('fax_order')),
           },
         ),
         opt('Не открывать', [
@@ -1073,10 +1096,21 @@ export const scenes: Record<string, Step[]> = {
         { if: flag('reliefWaiting'), tone: 'insight' },
       ),
     ]),
+    when(all(flag('gpVerified'), hasItem('order')), [
+      say('gp', 'Ленту давай. Ту, что касса ночью напечатала.'),
+      when(hasClue('fax_order'), [narr('На дату она смотрит дольше, чем на текст.')]),
+      when(
+        flag('gpTookTape'),
+        [narr('Она складывает ленту вчетверо и убирает в сумку — туда же, где кассета.')],
+        [narr('Она складывает ленту вчетверо и убирает в сумку. Не читая вслух.')],
+      ),
+      fx(take('order'), set('gpTookOrder')),
+    ]),
     when(flag('soldAlcohol'), [
       say('gp', 'В час сорок — «минеральная вода» за четыреста двадцать. Миша мне уже с утра спасибо передал. Ещё раз — и до свидания.'),
     ]),
-    when(flag('doorOpened'), [say('gp', 'Камера четыре: ночью открывали служебную дверь. Я же писала. Чёрным по белому.')]),
+    // Откуда она это знает, не сказано намеренно: кассета хранит только последний час (docs/story-audit.md, П-2).
+    when(flag('doorOpened'), [say('gp', 'Ночью открывали служебную дверь. Я же писала. Чёрным по белому.')]),
     when(flag('cam4WasOff'), [say('gp', 'И камеру четыре кто-то выключал. Я её три года не выключаю.')]),
     when((s) => Number(s.flags.tempMissed ?? 0) >= 2, [
       say('gp', 'В журнале температуры дыры. Это не для галочки.'),
@@ -1088,6 +1122,12 @@ export const scenes: Record<string, Step[]> = {
     when((s) => s.anomalies.log.filter((e) => e.result === 'correct').length >= 4, [
       narr('Галина Петровна листает журнал видеонаблюдения. На одной странице задерживается дольше, чем на остальных.'),
       say('gp', 'Это… Ладно. Костя тоже всё записывал.'),
+    ]),
+    when((s) => RECORD_CONTRADICTIONS.filter((c) => s.clues.includes(c)).length >= 2, [
+      narr('Галина Петровна смотрит на монитор камер. Долго.'),
+      say('gp', 'Записи врут. Запомни это.'),
+      say('gp', 'Записи врут — а люди потом им верят.'),
+      fx(set('gpRecordsLie')),
     ]),
     when((s) => s.anomalies.log.filter((e) => e.result !== 'correct').length >= 4, [
       say('gp', 'И журнал камер — не дневник. Половина записей — собачники и пакеты.'),

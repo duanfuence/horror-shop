@@ -6,6 +6,7 @@ import { add, clue, door, fx, hasItem, hint, narr, set, violate, when } from '..
 import type { Beat, CameraEvent, ContactDef, EndingDef, ShiftDef, TaskDef, Trigger, WorldState } from '../../core/types';
 import { ambient } from './ambient';
 import { anomalies } from './anomalies';
+import { formatTime } from '../../core/state';
 import { scenes } from './scenes';
 import { cold, dread, temperature } from './threat';
 import { characters, clues, journal, papers, products, speakers } from './world';
@@ -341,8 +342,7 @@ const endings: Record<string, EndingDef> = {
       (s.flags.rustamComing ? ' У входа сигналит такси. Рустам опускает стекло: «Смена всё? Садись, довезу».' : '') +
       (s.flags.gpConfessed ? ' Уже в дверях Галина Петровна говорит вам в спину: «Если он позвонит снова — скажи, что я жду».' : '') +
       (s.flags.gpTookTape ? ' Кассету с ночной записью она так и не вернула в видеомагнитофон.' : ''),
-    hook: (s) =>
-      `В кармане куртки шуршит бумага. Кассовый чек: 15.11.25, 05:58. Свеча, спички, батарейки. Кассир — ${s.playerName}.`,
+    hook: (s) => morningReceipt(s),
   },
   fired: {
     id: 'fired',
@@ -391,6 +391,33 @@ const endings: Record<string, EndingDef> = {
     hook: 'Но если Костя ушёл со склада — кто теперь остался там вместо него?',
   },
 };
+
+/**
+ * Чек в кармане в «Утре». Он есть всегда — запись о покупке 05:58 появляется при любом исходе, —
+ * но помнит, что игрок сделал с мужчиной в сером. Данные — флаги третьего визита и журнал продаж.
+ */
+export function morningReceipt(s: WorldState): string {
+  const name = s.playerName;
+  const head = 'В кармане куртки шуршит бумага.';
+  // Прогнали чеком 0317: старая запись «закрыта» — но теперь в ней чужое имя.
+  if (s.flags.greyDismissed) {
+    return `${head} Чек № 0317, тот самый: 15.11.22, 05:58, свеча, спички, батарейки. Сухой — впервые за ночь. Только в строке «КАССИР» теперь не «Ершов К.», а ${name}.`;
+  }
+  const sale = s.sales.find((x) => x.customer === 'grey' && x.items.includes('candle') && x.outcome === 'sold');
+  // Продали и порвали чек в 05:58: обрывки вернулись сами.
+  if (sale && s.flags.tornReceipt) {
+    return `${head} Мокрые обрывки чека — того, что вы порвали в 05:58. В карман вы их не клали. Можно разобрать: «…11.25 05:5…», «СВЕЧА ХОЗ.», «КАССИР: ${name.toUpperCase()}».`;
+  }
+  // Продали, а чек 05:58 так и не напечатался при вас: время на чеке не то, в которое вы пробивали.
+  if (sale) {
+    return `${head} Кассовый чек: 15.11.25, 05:58. Свеча, спички, батарейки. Кассир — ${name}. Вы пробили эту покупку в ${formatTime(sale.minutes)}.`;
+  }
+  // Не продали: запись о покупке есть, оплаты нет.
+  if (s.flags.greyRefused) {
+    return `${head} Кассовый чек: 15.11.25, 05:58. Свеча, спички, батарейки. Кассир — ${name}. Вы ему не продавали. Строка «ОПЛАЧЕНО» пустая.`;
+  }
+  return `${head} Кассовый чек: 15.11.25, 05:58. Свеча, спички, батарейки. Кассир — ${name}.`;
+}
 
 function cameraVisuals(cam: 1 | 2 | 3 | 4, s: WorldState, customer: string | null): string[] {
   const v: string[] = [];
