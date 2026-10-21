@@ -124,6 +124,13 @@ for (const [name, profile] of Object.entries(PROFILES)) {
   // кнопка «Запись» возвращает на прошлую позицию
   await click(page.locator('.cctv-ui .cam-btn.archive-btn'));
   check((await page.locator('.cam-time').innerText()) === hhmm(t), 'возврат в запись на ту же минуту');
+  if (!profile.hasTouch) {
+    // стрелка на сфокусированном ползунке — ровно одна минута, Esc из ползунка тоже работает
+    await page.locator('.cam-range').focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(100);
+    check((await page.locator('.cam-time').innerText()) === hhmm(t - 1), 'стрелка на ползунке — один шаг');
+  }
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   check(!(await page.locator('.cctv-ui.archive').count()) && (await page.locator('.cctv-ui').count()) === 1, 'Esc из записи — в эфир, камеры открыты');
