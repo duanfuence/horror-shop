@@ -257,6 +257,10 @@ export class Register {
       this.onSfx('cash');
       this.bus.emit('register:display', { top: 'СПАСИБО', bottom: `ИТОГО ${this.total()}` });
       window.setTimeout(() => this.onSfx('printer'), 250);
+      // Через несколько секунд дисплей возвращается в режим ожидания (если не началась новая продажа).
+      window.setTimeout(() => {
+        if (!this.resolve) this.bus.emit('register:display', null);
+      }, 3500);
     } else {
       this.bus.emit('register:display', null);
     }

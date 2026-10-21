@@ -109,6 +109,10 @@ async function run(name, profile) {
     await shot('08-scanned');
     await tap('.register.show .btn.primary');
     await advance();
+    // дисплей кассы после продажи возвращается в режим ожидания
+    await page.waitForTimeout(4000);
+    const vfd = await ns(() => window.__ns.stage.game.scene.getScene('store')['lastVfd']);
+    if (!String(vfd).startsWith('КАССА|')) errors.push(`дисплей кассы не вернулся в ожидание: «${vfd}»`);
 
     // записать температуру
     await advance();

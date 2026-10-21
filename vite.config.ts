@@ -16,7 +16,8 @@ export default defineConfig({
       },
     },
   },
-  server: { host: true },
+  // Сервер доступен только на этом компьютере. Для телефона в локальной сети —
+  // явные команды npm run dev:lan / npm run preview:lan.
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],

@@ -154,3 +154,13 @@ describe('сессия', () => {
     expect(session.isBusy).toBe(false);
   });
 });
+
+describe('локальные адреса', () => {
+  it('этот компьютер и домашняя сеть — локальные, внешние домены — нет', async () => {
+    const { isLocalHostname } = await import('../src/platform/hosts');
+    for (const h of ['localhost', '127.0.0.1', '192.168.1.34', '10.0.0.5', '172.20.3.4', '[::1]', 'my-pc.local', 'fd12:3456::1'])
+      expect(isLocalHostname(h), h).toBe(true);
+    for (const h of ['yandex.ru', 'app-123.games.s3.yandex.net', '8.8.8.8', '172.32.0.1', '192.169.0.1', 'example.com'])
+      expect(isLocalHostname(h), h).toBe(false);
+  });
+});

@@ -77,9 +77,12 @@ export function createGame(deps: GameDeps): Promise<StageBridge & { game: Phaser
       openCctv: (cam) => {
         if (!game.scene.isActive('cctv')) game.scene.wake('cctv');
         game.scene.bringToTop('cctv');
+        // Магазин под экраном камер не виден — не тратить на него отрисовку (логика продолжает работать).
+        store.sys.setVisible(false);
         cctv.show(cam);
       },
       closeCctv: () => {
+        store.sys.setVisible(true);
         if (game.scene.isActive('cctv')) game.scene.sleep('cctv');
       },
       setEffects: (on) => store.setEffects(on),

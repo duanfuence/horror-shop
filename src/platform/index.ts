@@ -1,11 +1,11 @@
+import { isLocalHostname } from './hosts';
 import { LocalPlatform } from './LocalPlatform';
 import type { Platform } from './Platform';
 
 const SAVE_KEYS = ['nightshift.run.v1', 'nightshift.meta.v1', 'nightshift.settings.v1'];
 
 function isLocalHost(): boolean {
-  const h = location.hostname;
-  return location.protocol === 'file:' || h === 'localhost' || h === '127.0.0.1' || h === '' || h.endsWith('.local');
+  return location.protocol === 'file:' || isLocalHostname(location.hostname);
 }
 
 function loadScript(src: string, timeoutMs: number): Promise<boolean> {
@@ -28,8 +28,8 @@ function loadScript(src: string, timeoutMs: number): Promise<boolean> {
 
 /**
  * Выбор платформы. На Яндекс Играх SDK отдаётся по адресу /sdk.js;
- * локально (localhost) SDK не загружается, если не указан параметр ?sdk=1
- * (для проверки через @yandex-games/sdk-dev-proxy).
+ * на этом компьютере и в локальной сети (телефон в той же Wi-Fi) SDK не загружается,
+ * если не указан параметр ?sdk=1 (для проверки через @yandex-games/sdk-dev-proxy).
  */
 export async function createPlatform(): Promise<Platform> {
   const params = new URLSearchParams(location.search);
