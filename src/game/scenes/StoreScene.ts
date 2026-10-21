@@ -61,6 +61,7 @@ export class StoreScene extends Phaser.Scene {
   private blinking = 0;
   private dark!: Phaser.GameObjects.RenderTexture;
   private flashGlow!: Phaser.GameObjects.Image;
+  private faceLight!: Phaser.GameObjects.Image;
   private frost!: Phaser.GameObjects.Image;
   private grain!: Phaser.GameObjects.TileSprite;
   private doorOpen!: Phaser.GameObjects.Image;
@@ -120,6 +121,8 @@ export class StoreScene extends Phaser.Scene {
 
     // свет и эффекты
     this.dark = this.add.renderTexture(0, 0, 320, 180).setOrigin(0).setDepth(D.dark);
+    // Неотображаемый «пятак» света: в темноте лицо покупателя слабо освещено кассой.
+    this.faceLight = this.make.image({ key: 'light_big', add: false }).setAlpha(0.8).setScale(1.3, 1.7);
     this.flashGlow = this.add.image(0, 0, 'light_big').setDepth(D.flash).setBlendMode(Phaser.BlendModes.ADD).setTint(0xffe2b0).setAlpha(0).setScale(1.1);
     this.frost = this.add.image(0, 0, 'frost').setOrigin(0).setDepth(D.frost).setAlpha(0);
     this.add.image(0, 0, 'vignette').setOrigin(0).setDepth(D.vignette);
@@ -190,6 +193,7 @@ export class StoreScene extends Phaser.Scene {
 
   setMode(mode: 'menu' | 'game'): void {
     this.mode = mode;
+    if (!this.customer) return;
     if (mode === 'menu') {
       this.setCustomer(null);
       this.clearItems();
@@ -205,7 +209,7 @@ export class StoreScene extends Phaser.Scene {
 
   setEffects(on: boolean): void {
     this.effects = on;
-    this.grain.setVisible(on);
+    this.grain?.setVisible(on);
   }
 
   // ═══════════════ покупатель ═══════════════
@@ -378,6 +382,10 @@ export class StoreScene extends Phaser.Scene {
       this.flashGlow.setAlpha(0);
     }
     this.emergencyGlow.setAlpha(emergency ? 0.25 + Math.sin(this.time.now / 300) * 0.05 : 0);
+    if (emergency && this.current && this.customer.visible) {
+      this.faceLight.setPosition(CUSTOMER_X, VP.y + 12);
+      this.dark.erase(this.faceLight);
+    }
     if (emergency) {
       this.dark.erase('light_small', REGISTER_DISPLAY.x + 8, REGISTER_DISPLAY.y - 6);
       this.dark.erase('light_small', MONITOR_SCREEN.x + 9, MONITOR_SCREEN.y + 3);
@@ -429,7 +437,7 @@ export class StoreScene extends Phaser.Scene {
           this.applyCustomerFrame('blink');
         }
       }
-      const tint = emergency ? 0x8a4a48 : 0xffffff;
+      const tint = emergency ? 0xc08a86 : 0xffffff;
       this.customer.setTint(tint);
     }
 

@@ -273,6 +273,7 @@ export class UI implements Presenter {
       if (this.mode !== 'game') return;
       this.mode = 'results';
       this.dialog.cancel();
+      this.hud.clearToasts();
       this.audio.setMode('menu');
       this.hud.el.style.display = 'none';
       this.screens.replaceChildren(
@@ -457,6 +458,7 @@ export class UI implements Presenter {
     this.session.openCameras();
     this.overlays.append(this.cams.el);
     this.app.classList.add('cctv-open');
+    this.hud.hover(null);
     this.audio.play('static');
     this.switchCam(this.lastCam);
   }
@@ -484,6 +486,7 @@ export class UI implements Presenter {
 
   /** Закрыть всё, что мешает диалогу (камеры, окна, меню двери). */
   private closeTransient(): void {
+    this.hud.hover(null);
     if (this.modals.openId && this.modals.openId !== 'pause' && this.modals.openId !== 'settings') this.modals.close();
     this.closeCameras();
     this.closeDoorMenu?.();

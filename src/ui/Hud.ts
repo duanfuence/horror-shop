@@ -56,7 +56,8 @@ export class Hud {
     const pause = h('button', { class: 'pause-btn', type: 'button', 'aria-label': 'Пауза', title: 'Пауза (Esc)', text: '❚❚', onclick: () => this.onPause() });
     this.toasts = h('div', { id: 'toasts' });
     this.hoverLabel = h('div', { class: 'hover-label', style: 'display:none' });
-    this.el = h('div', { id: 'hud' }, this.clock, this.tasks, tools, pause, this.hoverLabel);
+    const topbar = h('div', { class: 'topbar' }, this.clock, tools);
+    this.el = h('div', { id: 'hud' }, topbar, this.tasks, pause, this.hoverLabel);
   }
 
   setClock(text: string, paused: boolean): void {

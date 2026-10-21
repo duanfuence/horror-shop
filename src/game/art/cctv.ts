@@ -205,7 +205,7 @@ export function paintCam1(): HTMLCanvasElement {
 
 // ═══════════════ CAM 2 — вход и стоянка ═══════════════
 
-const cam2 = new Cam3([-2.0, 3.6, 7.6], 8, 38, 165);
+const cam2 = new Cam3([-2.0, 3.6, 7.6], -10, 30, 165);
 
 export function paintCam2(): HTMLCanvasElement {
   const pc = new PixelCanvas(CW, CH);
@@ -247,30 +247,30 @@ export function paintCam2(): HTMLCanvasElement {
   for (let i = -3; i <= 4; i++) c.line(pc, [i * 2.6, 0.02, 11], [i * 2.6, 0.02, 16], '#b5bab8', 0.8);
   c.line(pc, [-9, 0.02, 16], [12, 0.02, 16], '#b5bab8', 0.6);
   // фонарь и пятно света
-  const lampBase: V3 = [-6.5, 0, 17];
+  const lampBase: V3 = [-5.2, 0, 14.2];
   c.quad(pc, [
-    [-10, 0.01, 14],
-    [-3, 0.01, 14],
-    [-3, 0.01, 20],
-    [-10, 0.01, 20],
+    [-9, 0.01, 11],
+    [-1.5, 0.01, 11],
+    [-1.5, 0.01, 17.5],
+    [-9, 0.01, 17.5],
   ], (x, y) => {
     const [lx, ly] = c.p(lampBase[0], 0, lampBase[2]);
     const d = Math.hypot((x - lx) / 1.6, y - ly);
     return d < 30 ? mix('#b9b4a2', '#4a5056', Math.min(1, d / 30)) : null;
   });
-  c.line(pc, lampBase, [-6.5, 5.5, 17], '#101315');
-  c.line(pc, [-6.4, 0, 17], [-6.4, 5.5, 17], '#22272a');
-  const [hx, hy] = c.p(-6.0, 5.5, 17);
+  c.line(pc, lampBase, [-5.2, 5.5, 14.2], '#101315');
+  c.line(pc, [-5.1, 0, 14.2], [-5.1, 5.5, 14.2], '#22272a');
+  const [hx, hy] = c.p(-4.7, 5.5, 14.2);
   pc.ellipse(hx, hy, 5, 3, '#f4f1e2');
   pc.ellipse(hx, hy, 9, 6, (x, y) => (bayer(x, y) < 0.3 ? '#d8d2bd' : null), 0.6);
   // припаркованная машина
-  c.box(pc, [3.0, 0, 14.5], [4.8, 1.0, 18.5], '#6a7278', '#50575c', '#43494d', 'min', 'min');
-  c.box(pc, [3.2, 1.0, 15.5], [4.6, 1.5, 17.5], '#5a6166', '#2c3236', '#24292c', 'min', 'min');
+  c.box(pc, [1.8, 0, 15.0], [3.6, 1.0, 19.0], '#6a7278', '#50575c', '#43494d', 'min', 'min');
+  c.box(pc, [2.0, 1.0, 16.0], [3.4, 1.5, 18.0], '#5a6166', '#2c3236', '#24292c', 'min', 'min');
   // козырёк над входом снизу кадра
   pc.rect(0, CH - 12, CW, 12, '#1b1f22');
   pc.hline(0, CW, CH - 12, '#454c50');
-  spot('cam2_grey', c, -6.2, 17.4);
-  spot('cam2_taxi', c, -1.0, 12.5);
+  spot('cam2_grey', c, -4.6, 14.5);
+  spot('cam2_taxi', c, -1.0, 11.5);
   return finish(pc, 1.25);
 }
 

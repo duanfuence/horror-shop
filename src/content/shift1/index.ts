@@ -426,7 +426,7 @@ export const shift1: ShiftDef = {
   id: 'shift1',
   number: 1,
   title: 'Смена 1. Пятнадцатое ноября',
-  secondsPerMinute: 1.4,
+  secondsPerMinute: 1.3,
   startScene: 'intro',
   scenes,
   timeline,

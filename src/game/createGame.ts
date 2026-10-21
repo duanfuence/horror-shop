@@ -39,12 +39,13 @@ export function createGame(deps: GameDeps): Promise<StageBridge & { game: Phaser
           reject(err);
           return;
         }
+        // Мост отдаётся интерфейсу только после того, как обе сцены действительно созданы.
+        const created = (key: string) =>
+          new Promise<void>((done) => this.scene.get(key).events.once(Phaser.Scenes.Events.CREATE, () => done()));
+        void Promise.all([created('store'), created('cctv')]).then(() => resolve(bridge));
         this.scene.launch('store');
         this.scene.launch('cctv');
         this.scene.stop();
-        // Подождать, пока сцены создадутся.
-        this.time.delayedCall(0, () => undefined);
-        window.setTimeout(() => resolve(bridge), 0);
       }
     }
 

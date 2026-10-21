@@ -71,7 +71,7 @@ export class CctvScene extends Phaser.Scene {
     this.overlay = this.add.container(0, 0);
     this.darkRect = this.add.rectangle(0, 0, 320, 180, 0x000000, 0.5).setOrigin(0).setVisible(false);
     this.frost = this.add.image(0, 0, 'frost').setOrigin(0).setAlpha(0).setTint(0xcfffe0);
-    this.noise = this.add.tileSprite(0, 0, 320, 180, 'noise').setOrigin(0).setAlpha(0.16);
+    this.noise = this.add.tileSprite(0, 0, 320, 180, 'noise').setOrigin(0).setAlpha(0.1);
     this.band = this.add.rectangle(0, 0, 320, 10, 0xdfffee, 0.06).setOrigin(0);
     this.add.image(0, 0, 'vignette').setOrigin(0).setAlpha(0.9);
     this.staticBurst = this.add.tileSprite(0, 0, 320, 180, 'noise').setOrigin(0).setAlpha(0);

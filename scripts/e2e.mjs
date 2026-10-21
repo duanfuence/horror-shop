@@ -76,7 +76,7 @@ async function run(name, profile) {
   };
 
   try {
-    await page.goto(`${base}?debug=1&speed=6`);
+    await page.goto(`${base}?debug=1&speed=1`);
     await page.waitForSelector('.menu-card', { timeout: 20000 });
     await page.waitForTimeout(600);
     await shot('01-menu');
@@ -111,14 +111,14 @@ async function run(name, profile) {
     await advance();
 
     // записать температуру
-    await page.waitForFunction(() => !window.__ns.session.isBusy, null, { timeout: 15000 });
+    await advance();
     await ns(() => window.__ns.ui.tool('fridge'));
     await page.waitForSelector('.thermo');
     await shot('06-fridge');
     await tap('.thermo .btn');
 
     // камеры
-    await page.waitForFunction(() => !window.__ns.session.isBusy, null, { timeout: 15000 });
+    await advance();
     await ns(() => window.__ns.ui.tool('cameras'));
     await page.waitForTimeout(400);
     await shot('09-cam1');
@@ -137,7 +137,7 @@ async function run(name, profile) {
     await page.keyboard.press('Escape');
 
     // Рустам: диалог с выбором
-    await page.waitForFunction(() => window.__ns.session.customer?.id === 'rustam', null, { timeout: 30000 });
+    await page.waitForFunction(() => window.__ns.session.customer?.id === 'rustam', null, { timeout: 45000 });
     await page.waitForTimeout(900);
     await shot('13-rustam');
     await advance();
@@ -162,6 +162,10 @@ async function run(name, profile) {
     await page.mouse.move(profile.viewport.width * 0.6, profile.viewport.height * 0.45);
     await page.waitForTimeout(300);
     await shot('15-blackout');
+
+    // звук: контекст Web Audio создан и работает после действий игрока
+    const audioState = await ns(() => window.__ns.audio['ctx']?.state ?? 'нет');
+    if (audioState !== 'running') errors.push(`звук: AudioContext в состоянии «${audioState}»`);
 
     // пауза
     await page.keyboard.press('Escape');

@@ -61,7 +61,7 @@ async function boot(): Promise<void> {
   platform.gameReady();
 
   if (debug) {
-    (window as unknown as Record<string, unknown>).__ns = { session, ui, bus, save, stage, platform };
+    (window as unknown as Record<string, unknown>).__ns = { session, ui, bus, save, stage, platform, audio };
   }
 }
 
