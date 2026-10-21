@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { shift1 } from '../src/content/shift1';
 import { collectGotoTargets } from '../src/content/shift1/scenes';
@@ -48,6 +49,21 @@ describe('Смена 1: целостность данных', () => {
         if (st.t === 'enter') expect(shift1.characters[st.who], st.who).toBeDefined();
       });
     }
+  });
+
+  it('каждая улика журнала заметок где-то выдаётся (нет «мёртвых» улик)', () => {
+    const src = ['scenes.ts', 'index.ts', 'world.ts', 'anomalies.ts']
+      .map((f) => readFileSync(`src/content/shift1/${f}`, 'utf8'))
+      .join('\n');
+    for (const id of Object.keys(shift1.clues)) expect(src.includes(`clue('${id}')`), `улика ${id} нигде не выдаётся`).toBe(true);
+  });
+
+  it('дату на распоряжении 03:20 можно заметить — улика fax_order', async () => {
+    const r = await simulate(shift1, rulesPolicy(['Присмотреться к дате']), 12);
+    expect(r.errors).toEqual([]);
+    expect(r.state.clues).toContain('fax_order');
+    expect(r.state.inventory).toContain('order');
+    expect(r.ending).toBe('morning');
   });
 
   it('улики, которые выдают сцены, описаны в журнале заметок', async () => {
