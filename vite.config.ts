@@ -21,5 +21,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Тесты прохождения гоняют сотни смен подряд; 5 секунд по умолчанию мало для слабой машины.
+    testTimeout: 30000,
   },
 });
