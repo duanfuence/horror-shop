@@ -27,6 +27,8 @@ export class AudioEngine implements AudioPort {
   private mode: 'menu' | 'game' | 'off' = 'off';
   private ringTimer: number | null = null;
   private carTimer: number | null = null;
+  /** До какого момента (время AudioContext) холодильник молчит. */
+  private humStopUntil = 0;
 
   constructor(
     bus: EventBus,
@@ -39,6 +41,7 @@ export class AudioEngine implements AudioPort {
     });
     bus.on('state:changed', () => this.updateMood());
     bus.on('lights', () => this.updateMood());
+    bus.on('fx', ({ id }) => this.playFx(id));
   }
 
   /** Браузеры разрешают звук только после действия пользователя. */
@@ -208,7 +211,9 @@ export class AudioEngine implements AudioPort {
     const s = this.session().state;
     const blackout = inGame && s.lights === 'emergency';
     const attention = inGame ? s.stats.attention : 0;
-    this.hum.gain.setTargetAtTime(this.mode === 'off' || blackout ? 0 : 0.55, t, blackout ? 0.25 : 1);
+    if (t >= this.humStopUntil) {
+      this.hum.gain.setTargetAtTime(this.mode === 'off' || blackout ? 0 : 0.55, t, blackout ? 0.25 : 1);
+    }
     this.buzz.gain.setTargetAtTime(this.mode === 'off' || blackout ? 0 : 0.35, t, 0.3);
     const tension = this.mode === 'menu' ? 0.08 : Math.min(1, attention / 10) * 0.5 + (blackout ? 0.45 : 0);
     this.drone.gain.setTargetAtTime(tension * 0.5, t, 2);
@@ -247,6 +252,34 @@ export class AudioEngine implements AudioPort {
   }
 
   // ═══════════════ эффекты ═══════════════
+
+  /** Фоновые эффекты режиссёра тревоги, у которых есть звуковая сторона. */
+  private playFx(id: string): void {
+    if (!this.ctx || this.paused || this.ctx.state !== 'running' || this.mode !== 'game') return;
+    const t = this.ctx.currentTime + 0.01;
+    switch (id) {
+      case 'fridge_stop':
+        // Гудение обрывается, тишина — и компрессор запускается снова.
+        this.humStopUntil = t + 2.6;
+        this.hum.gain.cancelScheduledValues(t);
+        this.hum.gain.setTargetAtTime(0, t, 0.06);
+        this.hum.gain.setTargetAtTime(0.55, t + 2.6, 0.5);
+        this.thump(t + 2.55, 0.08);
+        break;
+      case 'tube_buzz':
+        this.buzz.gain.cancelScheduledValues(t);
+        this.buzz.gain.setTargetAtTime(1.1, t, 0.05);
+        this.buzz.gain.setTargetAtTime(0.35, t + 0.7, 0.2);
+        break;
+      case 'car_lights':
+        // Машина стоит с работающим мотором.
+        this.noiseBurst(t, 4.2, 0.05, 'lowpass', 140, 1.5, 22);
+        break;
+      case 'chill':
+        this.noiseBurst(t, 1.6, 0.04, 'lowpass', 380, 0.6);
+        break;
+    }
+  }
 
   play(id: SfxId): void {
     if (!this.ctx || this.paused || this.ctx.state !== 'running') return;
@@ -339,6 +372,36 @@ export class AudioEngine implements AudioPort {
         break;
       case 'drip':
         this.sweep(1500, 700, t, 0.08, 0.06, 'sine');
+        break;
+      case 'drips':
+        for (const [d, f] of [
+          [0, 1500],
+          [0.9, 1350],
+          [2.1, 1450],
+        ])
+          this.sweep(f, f / 2, t + d, 0.08, 0.04, 'sine');
+        break;
+      case 'scratch':
+        this.noiseBurst(t, 1.3, 0.05, 'bandpass', 1900, 2.5, 13);
+        break;
+      case 'thud':
+        this.thump(t, 0.6);
+        this.sweep(70, 35, t, 0.5, 0.12, 'sine');
+        break;
+      case 'steps_far':
+        for (let i = 0; i < 3; i++) this.thump(t + i * 0.55, 0.07);
+        break;
+      case 'glass_tap':
+        for (let i = 0; i < 3; i++) {
+          this.tone(1750, t + i * 0.32, 0.09, 0.05, 'triangle', 0.002);
+          this.noiseBurst(t + i * 0.32, 0.03, 0.05, 'highpass', 3000, 1);
+        }
+        break;
+      case 'clink':
+        this.tone(1900, t, 0.5, 0.05, 'triangle', 0.002);
+        this.tone(2750, t, 0.35, 0.03, 'triangle', 0.002);
+        this.thump(t + 0.12, 0.06);
+        for (let i = 0; i < 4; i++) this.noiseBurst(t + 0.3 + i * 0.16, 0.05, 0.02, 'bandpass', 1200, 2);
         break;
     }
   }

@@ -1,0 +1,394 @@
+/**
+ * Фоновые микрособытия смены 1 для режиссёра тревоги (src/core/TensionDirector.ts).
+ *
+ * Каждое событие — данные: когда возможно, как часто, какой «канал» занимает,
+ * что звучит и что видно. Ни одно событие не меняет скрытые параметры игрока:
+ * фон пугает и подсказывает, но не решает исход смены.
+ *
+ * intensity: 1 — атмосфера, 2 — тревожный знак, 3 — прямой намёк на опасность.
+ */
+import { effect, sfx } from '../../core/dsl';
+import type { AmbientConfig, AmbientEventDef, WorldState } from '../../core/types';
+import { temperature } from './threat';
+
+const noCustomer = (s: WorldState) => !s.flags.customer;
+const threatening = (s: WorldState) => temperature(s) < 0 || s.stats.attention >= 4;
+
+/**
+ * Окна сюжетных аномалий на камерах: в них фоновый силуэт не появляется,
+ * чтобы не спорить с сюжетом (жилет на камере 1, человек на стоянке на камере 2).
+ */
+const STORY_CAM_WINDOWS: Record<1 | 2, [number, number][]> = {
+  1: [[36, 58]],
+  2: [[126, 143]],
+};
+
+const CAM_SILHOUETTES: Record<1 | 2, { visual: string; text: string }[]> = {
+  1: [
+    { visual: 'amb_aisle', text: 'Камера 1: в дальнем конце прохода кто-то стоит. Тёмный, неподвижный. В зале — никого.' },
+    { visual: 'amb_aisle', text: 'Камера 1: у стеллажа с крупами — фигура. Лица не видно, только плечи.' },
+  ],
+  2: [
+    { visual: 'amb_lot', text: 'Камера 2: за краем стоянки, у деревьев, кто-то стоит лицом к магазину.' },
+    { visual: 'amb_lot', text: 'Камера 2: на дальнем краю стоянки — силуэт. Не курит, не звонит. Просто стоит.' },
+  ],
+};
+
+export const ambientEvents: AmbientEventDef[] = [
+  // ─────────── атмосфера ───────────
+  {
+    id: 'lamp_out',
+    weight: 1.2,
+    intensity: 1,
+    channel: 'lights',
+    cooldown: 30,
+    duringSale: true,
+    steps: [sfx('click'), effect('lamp_out')],
+    texts: ['Одна из ламп под потолком погасла. Помедлила — и зажглась снова.'],
+    textChance: 0.3,
+  },
+  {
+    id: 'tube_buzz',
+    weight: 1,
+    intensity: 1,
+    channel: 'lights',
+    cooldown: 25,
+    duringSale: true,
+    steps: [effect('tube_buzz')],
+  },
+  {
+    id: 'monitor_glitch',
+    weight: 1,
+    intensity: 1,
+    channel: 'monitor',
+    cooldown: 25,
+    duringSale: true,
+    steps: [sfx('static'), effect('monitor_glitch')],
+    texts: ['Монитор камер на секунду пошёл полосами.'],
+    textChance: 0.3,
+  },
+  {
+    id: 'car_lights',
+    weight: 0.9,
+    intensity: 1,
+    channel: 'street',
+    to: '04:30',
+    cooldown: 40,
+    max: 3,
+    duringSale: true,
+    steps: [effect('car_lights')],
+    texts: ['На стоянку заехала машина. Постояла с включёнными фарами. Уехала, никто не вышел.'],
+    textChance: 0.4,
+  },
+  {
+    id: 'thud_roof',
+    weight: 0.7,
+    intensity: 1,
+    channel: 'roof',
+    from: '00:30',
+    cooldown: 50,
+    max: 2,
+    steps: [sfx('thud')],
+    texts: ['Что-то тяжёлое упало на крышу. Ветка, наверное. Деревьев рядом нет.'],
+    textChance: 0.5,
+  },
+  {
+    id: 'drip',
+    weight: 0.8,
+    intensity: 1,
+    channel: 'water',
+    from: '01:00',
+    cooldown: 40,
+    dark: true,
+    steps: [sfx('drips')],
+    texts: ['Где-то в подсобке мерно капает вода.'],
+    textChance: 0.3,
+  },
+  {
+    id: 'radio',
+    weight: 0.5,
+    intensity: 1,
+    channel: 'radio',
+    from: '01:00',
+    to: '04:00',
+    cooldown: 60,
+    max: 1,
+    steps: [sfx('static')],
+    texts: ['Из подсобки на секунду донеслось радио. Старая песня. Оборвалась на полуслове.'],
+    textChance: 1,
+  },
+
+  // ─────────── тревожные знаки ───────────
+  {
+    id: 'bell_draft',
+    weight: 0.8,
+    intensity: 2,
+    channel: 'entrance',
+    from: '00:45',
+    cooldown: 45,
+    max: 2,
+    when: noCustomer,
+    avoid: { beats: ['bell'], radius: 15 },
+    steps: [sfx('bell')],
+    texts: ['Колокольчик над дверью звякнул. Дверь закрыта.', 'Колокольчик качнулся сам по себе. Сквозняка нет.'],
+    textChance: 0.6,
+  },
+  {
+    id: 'storage_knock',
+    weight: 1,
+    intensity: 2,
+    channel: 'service_door',
+    from: '01:00',
+    cooldown: 35,
+    max: 3,
+    avoid: { beats: ['delivery', 'knock', 'fusebox'], radius: 10 },
+    steps: [sfx('knock_soft'), effect('door_shake')],
+    texts: ['За служебной дверью что-то глухо стукнуло.', 'Со склада — короткий стук. Как будто уронили коробку.'],
+    textChance: 0.5,
+  },
+  {
+    id: 'scratch_wall',
+    weight: 0.8,
+    intensity: 2,
+    channel: 'service_door',
+    from: '02:30',
+    cooldown: 45,
+    max: 2,
+    avoid: { beats: ['delivery', 'kostya1'], radius: 8 },
+    steps: [sfx('scratch')],
+    texts: ['Из-за стены склада — будто кто-то медленно провёл ногтями по гипсокартону.'],
+    textChance: 0.7,
+  },
+  {
+    id: 'fridge_stop',
+    weight: 0.9,
+    intensity: 2,
+    channel: 'fridge',
+    from: '01:30',
+    cooldown: 45,
+    max: 3,
+    steps: [effect('fridge_stop')],
+    texts: ['Холодильник замолчал. Тишина давит на уши. Через пару секунд гудение возвращается.'],
+    textChance: 0.6,
+  },
+  {
+    id: 'temp_dip',
+    weight: 0.9,
+    intensity: 2,
+    channel: 'fridge',
+    from: '01:30',
+    cooldown: 50,
+    max: 3,
+    onFire: (s, rnd) => {
+      const value = 2 + (s.minutes >= 180 && rnd('deep') < 0.5 ? 1 : 0);
+      s.ambient.dip = { value, until: s.minutes + 6 };
+    },
+    steps: [sfx('thermo_beep'), effect('frost_puff')],
+    texts: ['На холодильнике коротко пискнул термометр.', 'Из холодильника пахнуло морозом, как из открытой форточки.'],
+    textChance: 0.7,
+  },
+  {
+    id: 'frost_breath',
+    weight: 0.8,
+    intensity: 2,
+    channel: 'fridge',
+    from: '02:00',
+    cooldown: 40,
+    max: 2,
+    when: (s) => temperature(s) <= 1,
+    steps: [effect('frost_puff')],
+    texts: ['Стекло холодильника изнутри затянуло инеем. Посередине — пятно, как от ладони.'],
+    textChance: 0.8,
+  },
+  {
+    id: 'window_shadow',
+    weight: 1,
+    intensity: 2,
+    channel: 'window',
+    from: '00:45',
+    cooldown: 35,
+    max: 3,
+    duringSale: true,
+    steps: [effect('window_shadow')],
+    texts: ['За витриной кто-то прошёл. Или показалось.'],
+    textChance: 0.5,
+  },
+  {
+    id: 'line2_blip',
+    weight: 0.7,
+    intensity: 2,
+    channel: 'phone',
+    from: '01:30',
+    to: '04:50',
+    cooldown: 60,
+    max: 2,
+    avoid: { beats: ['line2', 'kostya1', 'kostya2', 'climax_line'], radius: 12 },
+    steps: [effect('phone_blip')],
+    texts: ['Лампочка второй линии мигнула. Звонка не было.'],
+    textChance: 0.7,
+  },
+  {
+    id: 'blank_print',
+    weight: 0.6,
+    intensity: 2,
+    channel: 'register',
+    from: '01:45',
+    cooldown: 70,
+    max: 1,
+    when: noCustomer,
+    avoid: { beats: ['receipt', 'order', 'lastreceipt'], radius: 20 },
+    steps: [sfx('printer')],
+    texts: ['Касса коротко зажужжала и выплюнула пустой обрывок ленты.'],
+    textChance: 1,
+  },
+  {
+    id: 'can_fall',
+    weight: 0.6,
+    intensity: 2,
+    channel: 'floor',
+    from: '01:30',
+    cooldown: 60,
+    max: 1,
+    when: noCustomer,
+    onFire: (s) => {
+      s.ambient.floorItem = true;
+    },
+    steps: [sfx('clink'), effect('can_fall')],
+    texts: ['С верхней полки упала банка горошка. Покатилась и замерла у самого прилавка.'],
+    textChance: 1,
+  },
+  {
+    id: 'steps_empty',
+    weight: 0.8,
+    intensity: 2,
+    channel: 'floor',
+    from: '02:00',
+    cooldown: 45,
+    max: 2,
+    when: noCustomer,
+    steps: [sfx('steps_far')],
+    texts: ['В пустом зале — шаги. Три. И тишина.'],
+    textChance: 0.6,
+  },
+  {
+    id: 'cam_silhouette',
+    weight: 0.8,
+    intensity: 2,
+    channel: 'monitor',
+    from: '01:10',
+    to: '04:50',
+    cooldown: 50,
+    max: 2,
+    onFire: (s, rnd) => {
+      const m = s.minutes;
+      const free = ([1, 2] as const).filter((cam) =>
+        STORY_CAM_WINDOWS[cam].every(([a, b]) => m + 8 < a || m > b),
+      );
+      if (!free.length) return;
+      const cam = free[Math.floor(rnd('cam') * free.length)];
+      const variants = CAM_SILHOUETTES[cam];
+      const v = variants[Math.floor(rnd('variant') * variants.length)];
+      s.ambient.cam = { cam, visual: v.visual, until: m + 8, seen: false, text: v.text };
+    },
+    // Видно только тому, кто смотрит в камеры. В магазине — лишь короткий треск монитора.
+    steps: [effect('monitor_glitch')],
+  },
+
+  // ─────────── прямые намёки на опасность ───────────
+  {
+    id: 'glass_tap',
+    weight: 0.8,
+    intensity: 3,
+    channel: 'window',
+    from: '03:30',
+    cooldown: 60,
+    max: 1,
+    when: threatening,
+    steps: [sfx('glass_tap')],
+    texts: ['По стеклу витрины — три коротких стука. Снаружи никого.'],
+    textChance: 1,
+  },
+  {
+    id: 'whisper_vent',
+    weight: 0.8,
+    intensity: 3,
+    channel: 'vent',
+    from: '03:00',
+    cooldown: 60,
+    max: 1,
+    when: threatening,
+    steps: [sfx('whisper')],
+    texts: ['Из вентиляции — шёпот. Слов не разобрать. Только интонацию: так зовут по имени.'],
+    textChance: 1,
+  },
+  {
+    id: 'door_face',
+    weight: 0.8,
+    intensity: 3,
+    channel: 'service_door',
+    from: '04:00',
+    cooldown: 60,
+    max: 1,
+    when: (s) => temperature(s) < 0 && s.serviceDoor === 'closed',
+    avoid: { beats: ['delivery', 'kostya2'], radius: 8 },
+    steps: [effect('door_face')],
+    texts: ['В окошке служебной двери мелькнуло что-то бледное. Как лицо, прижатое к стеклу.'],
+    textChance: 1,
+  },
+  {
+    id: 'behind_you',
+    weight: 0.6,
+    intensity: 3,
+    channel: 'body',
+    from: '03:30',
+    cooldown: 90,
+    max: 1,
+    when: (s) => s.stats.attention >= 3,
+    steps: [effect('chill')],
+    texts: ['Холодок по шее. Как будто кто-то стоит за спиной и дышит. Обернуться?'],
+    textChance: 1,
+  },
+
+  // ─────────── в темноте (после 05:00) ───────────
+  {
+    id: 'dark_steps',
+    weight: 1,
+    intensity: 2,
+    channel: 'floor',
+    cooldown: 12,
+    max: 2,
+    dark: true,
+    when: (s) => !!s.flags.blackout,
+    steps: [sfx('steps_far')],
+    texts: ['В темноте зала кто-то переступил с ноги на ногу.'],
+    textChance: 0.7,
+  },
+  {
+    id: 'dark_breath',
+    weight: 1,
+    intensity: 2,
+    channel: 'body',
+    cooldown: 15,
+    max: 1,
+    dark: true,
+    when: (s) => !!s.flags.blackout,
+    steps: [sfx('wind'), effect('chill')],
+    texts: ['Изо рта идёт пар. В магазине холодно, как на улице.'],
+    textChance: 1,
+  },
+];
+
+export const ambient: AmbientConfig = {
+  events: ambientEvents,
+  // К утру и с ростом угрозы события чаще. Тихие участки остаются за счёт пауз после событий.
+  rate: (s) => {
+    const h = s.minutes / 60;
+    const p = 0.04 + h * 0.03 + Math.min(8, s.stats.attention) * 0.01;
+    return Math.max(0, Math.min(0.3, p));
+  },
+  maxQuiet: 16,
+  gap: [4, 8],
+  lull: { chance: 0.15, gap: [10, 15] },
+  sceneMargin: 2,
+};
+

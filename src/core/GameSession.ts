@@ -1,6 +1,8 @@
 import { EventBus } from './EventBus';
 import type { Presenter, SaleItemView } from './Presenter';
-import { createState, formatTime, parseTime, resolveText, SHIFT_END_MINUTES } from './state';
+import { randInt } from './random';
+import { createState, formatTime, parseTime, resolveText, SHIFT_END_MINUTES, upgradeState } from './state';
+import { TensionDirector, type DirectorHost } from './TensionDirector';
 import type {
   Beat,
   CameraEvent,
@@ -43,20 +45,24 @@ export class GameSession {
   private clockPauses = new Set<string>();
   private pauseReasons = new Set<string>();
   private msAcc = 0;
-  private beats: (Beat & { atMin: number })[];
+  private beats: (Beat & { atMin: number })[] = [];
   private camEvents: (CameraEvent & { fromMin: number; toMin: number })[];
   private ctx: EffectContext;
   private currentSceneId: string | null = null;
+  private director: TensionDirector | null = null;
+  private directorHost: DirectorHost;
 
   constructor(
     readonly shift: ShiftDef,
     readonly bus: EventBus,
     private presenter: Presenter,
   ) {
-    this.state = createState(shift, 'Саша');
-    this.beats = shift.timeline
-      .map((b) => ({ ...b, atMin: parseTime(b.at) }))
-      .sort((a, b) => a.atMin - b.atMin);
+    this.state = createState(shift, 'Саша', 1);
+    this.planBeats();
+    if (shift.ambient) {
+      this.director = new TensionDirector(shift.ambient);
+      if (shift.dread) this.director.dread = (s) => shift.dread!(s);
+    }
     this.camEvents = shift.cameraEvents.map((e) => ({
       ...e,
       fromMin: parseTime(e.from),
@@ -66,19 +72,67 @@ export class GameSession {
       emitToast: (text) => this.bus.emit('toast', { text: resolveText(text, this.state) }),
       emitJournal: (tab) => this.bus.emit('journal:new', { tab }),
     };
+    const self = this;
+    this.directorHost = {
+      get state() {
+        return self.state;
+      },
+      get busy() {
+        return self.busy;
+      },
+      get inSale() {
+        return Boolean(self.state.flags.saleActive);
+      },
+      minutesToNextScene: () => this.minutesToNextScene(),
+      beatMinute: (id) => this.beatMinute(id),
+      run: (steps) => this.runAmbient(steps),
+      toast: (text) => this.bus.emit('toast', { text: resolveText(text, this.state) }),
+      announce: (id, minutes) => this.bus.emit('ambient', { id, minutes }),
+    };
+  }
+
+  /**
+   * Время сюжетных событий этого прохождения: у некритичных событий есть допустимый сдвиг (jitter),
+   * он выбирается по seed. Порядок и условия сцен не меняются, ключевые события стоят на месте.
+   */
+  private planBeats(): void {
+    const seed = this.state.seed;
+    this.beats = this.shift.timeline
+      .map((b) => {
+        let atMin = parseTime(b.at);
+        if (b.jitter) atMin += randInt(seed, b.jitter[0], b.jitter[1], 'beat', b.id);
+        return { ...b, atMin };
+      })
+      .sort((a, b) => a.atMin - b.atMin);
+  }
+
+  /** Минута, на которую в этом прохождении назначено сюжетное событие. */
+  beatMinute(id: string): number | undefined {
+    return this.beats.find((b) => b.id === id)?.atMin;
+  }
+
+  /** Через сколько минут ближайшее ожидающее событие хронологии (сцена или фоновое сюжетное событие). */
+  private minutesToNextScene(): number {
+    const s = this.state;
+    for (const b of this.beats) {
+      if (s.fired.includes(b.id)) continue;
+      if (b.when && b.atMin <= s.minutes) continue;
+      return b.atMin - s.minutes;
+    }
+    return Infinity;
   }
 
   // ───────────── жизненный цикл ─────────────
 
-  startNew(playerName: string): void {
-    this.reset(createState(this.shift, playerName));
+  startNew(playerName: string, seed?: number): void {
+    this.reset(createState(this.shift, playerName, seed));
     this.status = 'running';
     this.runScene(this.shift.startScene, this.shift.scenes[this.shift.startScene]);
   }
 
   /** Продолжить с контрольной точки. */
   resume(saved: WorldState): void {
-    this.reset(saved);
+    this.reset(upgradeState(saved));
     delete this.state.flags.customer;
     delete this.state.flags.saleActive;
     this.status = 'running';
@@ -105,6 +159,7 @@ export class GameSession {
   private reset(state: WorldState): void {
     this.stop();
     this.state = state;
+    this.planBeats();
     this.msAcc = 0;
     this.currentSceneId = null;
     this.bus.emit('state:changed');
@@ -174,6 +229,9 @@ export class GameSession {
     this.bus.emit('clock:minute', { minutes: s.minutes });
     this.bus.emit('state:changed');
     this.checkTimeline();
+    if (this.director && this.status === 'running' && s.minutes < SHIFT_END_MINUTES) {
+      this.director.onMinute(this.directorHost);
+    }
     if (!this.busy && s.minutes % 5 === 0) this.checkpoint();
   }
 
@@ -199,6 +257,7 @@ export class GameSession {
       if (beat.when && !beat.when(s)) continue;
       if (beat.ambient) {
         s.fired.push(beat.id);
+        s.ambient.lastScene = s.minutes;
         this.runAmbient(this.sceneSteps(beat.scene));
         continue;
       }
@@ -227,6 +286,7 @@ export class GameSession {
   private runScene(id: string, steps: Step[]): void {
     this.busy = true;
     this.currentSceneId = id;
+    this.state.ambient.lastScene = this.state.minutes;
     const token = this.runToken;
     this.pauseClock('scene');
     this.presenter.dialogStart();
@@ -392,6 +452,9 @@ export class GameSession {
       case 'clear':
         this.presenter.dialogEnd();
         return 'continue';
+      case 'fx':
+        this.bus.emit('fx', { id: step.id });
+        return 'continue';
     }
   }
 
@@ -480,6 +543,9 @@ export class GameSession {
           break;
         case 'hint':
           this.bus.emit('hint:object', { target: step.target });
+          break;
+        case 'fx':
+          this.bus.emit('fx', { id: step.id });
           break;
         default:
           console.warn(`[ambient] шаг "${step.t}" не поддерживается в фоновом режиме`);
@@ -581,9 +647,29 @@ export class GameSession {
         if (ev.onSeen) this.runAmbient(ev.onSeen);
       }
     }
+    const amb = this.ambientCameraVisual(cam);
+    if (amb) {
+      visuals.push(amb);
+      const c = s.ambient.cam!;
+      if (!c.seen) {
+        c.seen = true;
+        if (c.text) this.bus.emit('toast', { text: c.text });
+      }
+    } else if (s.ambient.cam?.seen) {
+      // Увиденный силуэт пропадает, стоит переключиться на другую камеру.
+      s.ambient.cam = null;
+    }
     this.act(`camera:${cam}`);
     this.bus.emit('state:changed');
     return visuals;
+  }
+
+  /** Фоновый силуэт режиссёра тревоги на камере (если он сейчас там). */
+  ambientCameraVisual(cam: number): string | null {
+    const c = this.state.ambient.cam;
+    if (!c || c.cam !== cam) return null;
+    if (this.state.minutes > c.until || this.state.flags.blackout) return null;
+    return c.visual;
   }
 
   /** Обход камер привязан к часу: 02:00–02:59 → '2', 04:00–04:59 → '4'. */

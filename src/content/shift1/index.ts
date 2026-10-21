@@ -4,42 +4,39 @@
  */
 import { add, clue, door, fx, hasItem, hint, narr, set, violate, when } from '../../core/dsl';
 import type { Beat, CameraEvent, ContactDef, EndingDef, ShiftDef, TaskDef, Trigger, WorldState } from '../../core/types';
+import { ambient } from './ambient';
 import { scenes } from './scenes';
+import { cold, dread, temperature } from './threat';
 import { characters, clues, journal, papers, products, speakers } from './world';
 
 const hourOf = (s: WorldState) => Math.floor(s.minutes / 60);
 
-/** Температура холодильника: падает к утру и от «внимания той стороны». */
-function temperature(s: WorldState): number {
-  if (s.flags.blackout) return -9 - Math.floor(s.stats.attention);
-  const base = [4, 4, 3, 3, 2, 1][Math.min(5, hourOf(s))];
-  return base - Math.floor(s.stats.attention * 1.2);
-}
-
-const cold = (s: WorldState) => temperature(s) < 0;
-
+/**
+ * Хронология. jitter — допустимый сдвиг некритичных событий (выбирается по seed прохождения):
+ * ночь от раза к разу звучит иначе, а обучение, стук в 03:40 и весь финал стоят на месте.
+ */
 const timeline: Beat[] = [
   { id: 'courier', at: '00:04', scene: 'courier' },
-  { id: 'rustam', at: '00:16', scene: 'rustam' },
-  { id: 'bell', at: '00:26', scene: 'bell_nobody', ambient: true },
-  { id: 'grey1', at: '00:33', scene: 'grey1' },
+  { id: 'rustam', at: '00:16', scene: 'rustam', jitter: [-3, 3] },
+  { id: 'bell', at: '00:26', scene: 'bell_nobody', ambient: true, jitter: [-4, 4] },
+  { id: 'grey1', at: '00:33', scene: 'grey1', jitter: [-3, 4] },
   { id: 'h1', at: '01:00', scene: 'hour_tick', ambient: true },
-  { id: 'liza', at: '01:05', scene: 'liza' },
-  { id: 'receipt', at: '01:26', scene: 'receipt_phantom' },
-  { id: 'misha', at: '01:42', scene: 'misha' },
+  { id: 'liza', at: '01:05', scene: 'liza', jitter: [-4, 4] },
+  { id: 'receipt', at: '01:26', scene: 'receipt_phantom', jitter: [-8, 8] },
+  { id: 'misha', at: '01:42', scene: 'misha', jitter: [-5, 5] },
   { id: 'h2', at: '02:00', scene: 'hour_tick_round', ambient: true },
-  { id: 'gp_call', at: '02:02', scene: 'gp_call' },
-  { id: 'grey2', at: '02:22', scene: 'grey2' },
-  { id: 'line2', at: '02:44', scene: 'line2_single' },
+  { id: 'gp_call', at: '02:02', scene: 'gp_call', jitter: [0, 4] },
+  { id: 'grey2', at: '02:22', scene: 'grey2', jitter: [0, 5] },
+  { id: 'line2', at: '02:44', scene: 'line2_single', jitter: [-6, 6] },
   { id: 'h3', at: '03:00', scene: 'relay_click', ambient: true },
-  { id: 'kostya1', at: '03:08', scene: 'kostya_call1' },
+  { id: 'kostya1', at: '03:08', scene: 'kostya_call1', jitter: [-2, 2] },
   { id: 'kostya_note', at: '03:10', scene: 'kostya_note_hint', ambient: true, when: (s) => !!s.flags.kostyaIgnored },
-  { id: 'order', at: '03:20', scene: 'fake_order' },
-  { id: 'liza2', at: '03:29', scene: 'liza_return', when: (s) => !!s.flags.lizaOk && !s.flags.lizaCold, window: 10 },
+  { id: 'order', at: '03:20', scene: 'fake_order', jitter: [-3, 3] },
+  { id: 'liza2', at: '03:29', scene: 'liza_return', when: (s) => !!s.flags.lizaOk && !s.flags.lizaCold, window: 10, jitter: [-3, 3] },
   { id: 'delivery', at: '03:40', scene: 'delivery', window: 40 },
   { id: 'h4', at: '04:00', scene: 'hour_tick_round', ambient: true },
-  { id: 'kostya2', at: '04:06', scene: 'kostya_call2', when: (s) => !!s.flags.kostyaCall1 },
-  { id: 'grey3', at: '04:36', scene: 'grey3', window: 20 },
+  { id: 'kostya2', at: '04:06', scene: 'kostya_call2', when: (s) => !!s.flags.kostyaCall1, jitter: [-3, 4] },
+  { id: 'grey3', at: '04:36', scene: 'grey3', window: 20, jitter: [-4, 4] },
   { id: 'blackout', at: '05:00', scene: 'blackout', window: 60 },
   { id: 'climax_line', at: '05:06', scene: 'climax_line', when: (s) => !!s.flags.kostyaCall1 && !!s.flags.blackout, window: 10 },
   { id: 'fusebox', at: '05:12', scene: 'climax_fusebox', when: (s) => !!s.flags.blackout, window: 12 },
@@ -443,6 +440,8 @@ export const shift1: ShiftDef = {
   journal,
   initialStats: { attention: 0, trustManager: 6, trustKostya: 0, neglect: 0 },
   temperature,
+  dread,
+  ambient,
   finalBeat: 'morning',
   cameraVisuals,
   onHourEnd(s, hour, ctx) {

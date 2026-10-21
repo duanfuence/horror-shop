@@ -75,6 +75,28 @@ my_scene: [
 { id: 'photo', on: 'inspect:photo', cooldown: 0, steps: [narr('...'), fx(clue('kostya_photo'))] }
 ```
 
+Некритичному событию можно разрешить небольшой сдвиг по seed прохождения: `jitter: [-4, 4]` (минуты).
+Обучение, ключевые проверки и финал не сдвигайте.
+
+## Фоновые события (режиссёр тревоги)
+
+Пул лежит в `src/content/shift1/ambient.ts`, правила частоты — там же (`ambient.rate`, паузы, отступ от сцен).
+Событие — данные, без кода в сценах:
+
+```ts
+{
+  id: 'storage_knock', weight: 1, intensity: 2, channel: 'service_door',
+  from: '01:00', cooldown: 35, max: 3,
+  avoid: { beats: ['delivery'], radius: 10 },     // не рядом с сюжетным стуком
+  steps: [sfx('knock_soft'), effect('door_shake')],
+  texts: ['За служебной дверью что-то глухо стукнуло.'], textChance: 0.5,
+}
+```
+
+`effect('id')` — визуальный/звуковой эффект: его рисуют `StoreScene`, `CctvScene` и `AudioEngine`
+(незнакомый id просто игнорируется). Фоновые события **не должны менять** `stats`, флаги, улики и нарушения —
+это проверяет tests/tension.test.ts. Сводка по 200 прогонам на стратегию: `npm run report:tension`.
+
 ## Новая смена
 
 1. Скопировать `src/content/shift1` в `src/content/shift2` и изменить данные.

@@ -43,6 +43,10 @@ export interface GameEvents {
   'register:display': { top: string; bottom: string } | null;
   /** Камеры открыты/закрыты, выбрана камера. */
   'cctv': { cam: number | null };
+  /** Визуальный/звуковой эффект фонового события (лампа гаснет, тень за витриной…). */
+  'fx': { id: string };
+  /** Сработало фоновое событие режиссёра тревоги. */
+  'ambient': { id: string; minutes: number };
 }
 
 type Handler<T> = (payload: T) => void;

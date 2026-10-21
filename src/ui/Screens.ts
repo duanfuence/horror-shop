@@ -214,6 +214,8 @@ export function resultsScreen(opts: {
       h('div', { class: 'kicker', text: 'Концовки' }),
       endingsList,
       h('p', { class: 'muted-note', style: 'margin:0', text: 'Смена 2 — скоро. Решения этой ночи будут иметь значение.' }),
+      // Код ночи помогает тестировщикам сообщать о прохождении: по нему ночь воспроизводится.
+      h('p', { class: 'muted-note run-code', style: 'margin:0', text: `Код ночи: ${state.seed}` }),
       h(
         'div',
         { class: 'row-btns' },

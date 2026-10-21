@@ -210,6 +210,8 @@ export const hint = (target: string | null): Step => ({ t: 'hint', target });
 export const goto = (scene: string): Step => ({ t: 'goto', scene });
 export const end = (ending: string): Step => ({ t: 'end', ending });
 export const clear = (): Step => ({ t: 'clear' });
+/** Визуальный/звуковой эффект (лампа погасла, тень за витриной…) — его рисуют сцена, звук и интерфейс. */
+export const effect = (id: string): Step => ({ t: 'fx', id });
 
 export function sale(spec: {
   items: (string | SaleItemSpec)[];

@@ -37,7 +37,13 @@ export type SfxId =
   | 'steps'
   | 'sting'
   | 'page'
-  | 'drip';
+  | 'drip'
+  | 'drips'
+  | 'scratch'
+  | 'thud'
+  | 'steps_far'
+  | 'glass_tap'
+  | 'clink';
 
 /** Скрытые числовые параметры мира. Игроку напрямую не показываются. */
 export interface Stats {
@@ -61,8 +67,33 @@ export interface SaleRecord {
   overridden: boolean;
 }
 
+/** Состояние режиссёра тревоги (фоновых событий) внутри прохождения. */
+export interface AmbientState {
+  /** Минута последнего срабатывания каждого события. */
+  last: Record<string, number>;
+  /** Сколько раз событие срабатывало за смену. */
+  count: Record<string, number>;
+  /** Журнал срабатываний [id, минута] — для отчётов и тестов. */
+  log: [string, number][];
+  /** До какой минуты длится тишина после предыдущего события. */
+  quietUntil: number;
+  /** Минута последнего фонового события. */
+  lastAt: number;
+  /** Минута, когда в последний раз начиналась сюжетная сцена. */
+  lastScene: number;
+  /** Временный провал температуры. */
+  dip: { value: number; until: number } | null;
+  /** Силуэт на камере, который видно, только если смотреть. */
+  cam: { cam: 1 | 2 | 3 | 4; visual: string; until: number; seen: boolean; text: string } | null;
+  /** Упавшая с полки банка лежит на полу до конца смены. */
+  floorItem: boolean;
+}
+
 export interface WorldState {
   v: number;
+  /** seed прохождения: определяет фоновые события, сдвиги времени и колебания температуры. */
+  seed: number;
+  ambient: AmbientState;
   shiftId: string;
   playerName: string;
   /** Игровые минуты от 00:00. */
@@ -168,6 +199,8 @@ export type Step =
   | { t: 'knock'; strength?: number }
   | { t: 'flashlight'; on: boolean }
   | { t: 'hint'; target: string | null }
+  /** Визуальный/звуковой эффект для сцены, звука и интерфейса (обрабатывается подписчиками шины). */
+  | { t: 'fx'; id: string }
   | { t: 'goto'; scene: SceneId }
   | { t: 'end'; ending: string }
   | { t: 'clear' };
@@ -183,6 +216,52 @@ export interface Beat {
   window?: number;
   /** Фоновые события не останавливают часы и могут идти параллельно сцене. */
   ambient?: boolean;
+  /** Допустимый сдвиг времени в минутах [от, до], выбирается по seed прохождения. */
+  jitter?: [number, number];
+}
+
+/** Фоновое микрособытие режиссёра тревоги. */
+export interface AmbientEventDef {
+  id: string;
+  /** Относительная частота выбора. */
+  weight: number;
+  /** 1 — чисто атмосферное, 2 — тревожное, 3 — указывает на опасность. */
+  intensity: 1 | 2 | 3;
+  /** «Канал»: два события одного канала не идут подряд (свет, телефон, служебная дверь…). */
+  channel: string;
+  from?: string;
+  to?: string;
+  /** Минимум игровых минут между повторами. */
+  cooldown: number;
+  /** Не больше стольких раз за смену. */
+  max?: number;
+  when?: Cond;
+  /** Разрешено, пока игрок обслуживает покупателя. */
+  duringSale?: boolean;
+  /** Разрешено в темноте после 05:00 (во время финала). */
+  dark?: boolean;
+  /** Не ближе radius минут к этим сюжетным событиям (например, не звонить по линии 2 рядом со звонками Кости). */
+  avoid?: { beats: string[]; radius: number };
+  steps: Step[];
+  /** Короткие наблюдения: одно выбирается по seed и показывается с вероятностью textChance. */
+  texts?: string[];
+  textChance?: number;
+  /** Действие с доступом к воспроизводимой случайности (провал температуры, выбор камеры). */
+  onFire?: (s: WorldState, rnd: (key: string) => number) => void;
+}
+
+export interface AmbientConfig {
+  events: AmbientEventDef[];
+  /** Вероятность события в данную игровую минуту. */
+  rate(s: WorldState): number;
+  /** Не дольше стольких минут без каких-либо событий. */
+  maxQuiet: number;
+  /** Тишина после события, минуты [от, до]. */
+  gap: [number, number];
+  /** Иногда тишина длиннее: шанс и длительность. */
+  lull: { chance: number; gap: [number, number] };
+  /** Сколько минут не трогать игрока до и после сюжетной сцены. */
+  sceneMargin: number;
 }
 
 /** Аномалия, видимая только на камере в определённое окно времени. */
@@ -315,6 +394,10 @@ export interface ShiftDef {
   initialStats: Stats;
   /** Температура в холодильнике в текущий момент. */
   temperature(s: WorldState): number;
+  /** Уровень угрозы ночи (время + внимание + сюжет). Производная величина, не хранится. */
+  dread?(s: WorldState): number;
+  /** Режиссёр тревоги: пул фоновых событий и правила их частоты. */
+  ambient?: AmbientConfig;
   /** Сцена финала, которая гарантированно запускается в 06:00. */
   finalBeat: string;
   journal: JournalContent;

@@ -53,6 +53,9 @@ async function boot(): Promise<void> {
     onStep: (delta) => session.update(delta * speed),
   });
   ui.attach(session, stage);
+  // Отладка: ?seed=N повторяет ту же ночь (фоновые события, сдвиги сюжета, колебания температуры).
+  const rawSeed = Number(params.get('seed'));
+  if (debug && Number.isInteger(rawSeed) && rawSeed > 0) ui.debugSeed = rawSeed;
 
   // Пауза при сворачивании вкладки и по запросу платформы — со звуком.
   document.addEventListener('visibilitychange', () => ui.setExternalPause('hidden', document.hidden));

@@ -83,6 +83,13 @@ export class StoreScene extends Phaser.Scene {
   private flicker = 0;
   private flickerCooldown = 3000;
   private effects = true;
+  /** Фоновые эффекты режиссёра тревоги: остаток длительности в мс. */
+  private fxDim = 0;
+  private fxBlip = 0;
+  private fxThermoOff = 0;
+  private shadow!: Phaser.GameObjects.Image;
+  private floorCan!: Phaser.GameObjects.Image;
+  private doorFace!: Phaser.GameObjects.Ellipse;
   private mode: 'menu' | 'game' = 'menu';
   private display: { top: string; bottom: string } | null = null;
   private lastThermo = '';
@@ -100,6 +107,11 @@ export class StoreScene extends Phaser.Scene {
     this.add.image(0, 0, 'store_base').setOrigin(0).setDepth(D.base);
     this.doorOpen = this.add.image(0, 0, 'door_open').setOrigin(0).setDepth(D.door).setVisible(false);
     this.aisleFigure = this.add.image(206, 107, 'fig_dark').setOrigin(0.5, 1).setDepth(D.aisle).setScale(0.95).setVisible(false);
+    // тень за витриной и упавшая банка — для фоновых событий
+    this.shadow = this.add.image(0, 94, 'fig_dark').setOrigin(0.5, 1).setDepth(D.outside + 0.5).setScale(0.85).setAlpha(0).setTint(0x7c8a82);
+    this.floorCan = this.add.image(214, 109, 'icon:can').setOrigin(0.5, 1).setDepth(D.aisle).setAngle(90).setVisible(false);
+    // бледное пятно в окошке служебной двери
+    this.doorFace = this.add.ellipse(22, 62, 6, 8, 0xc9d2cb, 1).setDepth(D.door + 0.5).setAlpha(0);
 
     this.customer = this.add.image(CUSTOMER_X, 0, '__DEFAULT').setOrigin(0.5, 0).setDepth(D.customer).setVisible(false);
     this.add.image(0, 0, 'store_counter').setOrigin(0).setDepth(D.counter);
@@ -187,8 +199,70 @@ export class StoreScene extends Phaser.Scene {
       bus.on('sfx', ({ id }) => {
         if (id === 'printer') this.printAnim();
       }),
+      bus.on('fx', ({ id }) => this.playFx(id)),
     );
     this.events.once('shutdown', () => this.unsub.forEach((u) => u()));
+  }
+
+  /** Эффекты фоновых событий режиссёра тревоги (ambient.ts смены). Незнакомые id игнорируются. */
+  private playFx(id: string): void {
+    if (this.mode !== 'game') return;
+    switch (id) {
+      case 'lamp_out':
+        this.fxDim = 1600;
+        break;
+      case 'tube_buzz':
+        this.flicker = 600;
+        break;
+      case 'monitor_glitch':
+        this.tweens.killTweensOf(this.monitorNoise);
+        this.monitorNoise.setAlpha(0.95);
+        this.tweens.add({ targets: this.monitorNoise, alpha: 0.22, duration: 700 });
+        break;
+      case 'car_lights':
+        this.carTimer = 14000 + Math.random() * 10000;
+        this.tweens.killTweensOf(this.headlights);
+        this.headlights.setPosition(60, 74).setAlpha(0);
+        this.tweens.chain({
+          targets: this.headlights,
+          tweens: [
+            { x: 112, alpha: 0.34, duration: 1400, ease: 'Sine.easeOut' },
+            { alpha: 0.3, duration: 2600 },
+            { alpha: 0, duration: 700 },
+          ],
+        });
+        break;
+      case 'window_shadow': {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        this.tweens.killTweensOf(this.shadow);
+        this.shadow.setPosition(dir > 0 ? 62 : 156, 94).setAlpha(0).setFlipX(dir < 0);
+        this.tweens.add({ targets: this.shadow, x: dir > 0 ? 156 : 62, duration: 1700, ease: 'Linear' });
+        this.tweens.add({ targets: this.shadow, alpha: 0.9, duration: 400, yoyo: true, hold: 900 });
+        break;
+      }
+      case 'door_shake':
+        if (this.effects) this.cameras.main.shake(110, 0.0015);
+        break;
+      case 'door_face':
+        this.tweens.killTweensOf(this.doorFace);
+        this.doorFace.setAlpha(0);
+        this.tweens.add({ targets: this.doorFace, alpha: 0.4, duration: 250, yoyo: true, hold: 500 });
+        break;
+      case 'fridge_stop':
+        this.fxThermoOff = 2600;
+        break;
+      case 'frost_puff':
+      case 'chill':
+        this.frost.setAlpha(Math.max(this.frost.alpha, id === 'chill' ? 0.5 : 0.4));
+        break;
+      case 'can_fall':
+        this.floorCan.setVisible(true).setY(97).setAlpha(1);
+        this.tweens.add({ targets: this.floorCan, y: 109, duration: 260, ease: 'Bounce.easeOut' });
+        break;
+      case 'phone_blip':
+        this.fxBlip = 650;
+        break;
+    }
   }
 
   setMode(mode: 'menu' | 'game'): void {
@@ -333,7 +407,8 @@ export class StoreScene extends Phaser.Scene {
   private drawThermo(): void {
     const s = this.deps.session();
     const t = this.mode === 'game' ? s.temperature() : 4;
-    const text = `${t > 0 ? '+' : t < 0 ? '-' : ''}${Math.abs(t)}`;
+    // Холодильник на секунду замолчал — термометр гаснет вместе с ним.
+    const text = this.fxThermoOff > 0 ? '' : `${t > 0 ? '+' : t < 0 ? '-' : ''}${Math.abs(t)}`;
     if (text === this.lastThermo) return;
     this.lastThermo = text;
     const pc = new PixelCanvas(14, 6);
@@ -369,6 +444,10 @@ export class StoreScene extends Phaser.Scene {
     this.dark.clear();
     let darkness = inGame ? 0.1 + Math.min(0.18, attention * 0.015) : 0.22;
     if (flickering && this.effects) darkness += 0.4;
+    if (this.fxDim > 0) {
+      this.fxDim -= delta;
+      darkness += 0.22;
+    }
     if (emergency) darkness = 0.93;
     this.dark.fill(emergency ? 0x080203 : 0x000000, darkness);
     const p = this.input.activePointer;
@@ -393,6 +472,8 @@ export class StoreScene extends Phaser.Scene {
 
     // сменщик ждёт в темноте между стеллажами
     this.aisleFigure.setVisible(inGame && emergency && !!s.flags.reliefWaiting && !this.current);
+    this.floorCan.setVisible(inGame && !!s.ambient?.floorItem);
+    this.doorFace.setVisible(inGame && !emergency && s.serviceDoor === 'closed');
 
     // иней
     const temp = inGame ? session.temperature() : 4;
@@ -445,7 +526,9 @@ export class StoreScene extends Phaser.Scene {
     this.leds.clear();
     const blinkOn = Math.floor(this.time.now / 180) % 2 === 0;
     this.leds.fillStyle(this.ringing[1] && blinkOn ? 0x7dff9a : 0x1d2a20, 1).fillRect(PHONE_LEDS.line1.x, PHONE_LEDS.line1.y, 2, 2);
-    this.leds.fillStyle(this.ringing[2] && blinkOn ? 0xff5a4a : 0x2a1a18, 1).fillRect(PHONE_LEDS.line2.x, PHONE_LEDS.line2.y, 2, 2);
+    if (this.fxBlip > 0) this.fxBlip -= delta;
+    const line2On = (this.ringing[2] && blinkOn) || this.fxBlip > 0;
+    this.leds.fillStyle(line2On ? 0xff5a4a : 0x2a1a18, 1).fillRect(PHONE_LEDS.line2.x, PHONE_LEDS.line2.y, 2, 2);
 
     // фары проезжающих машин за витриной
     if (!paused) {
@@ -470,6 +553,7 @@ export class StoreScene extends Phaser.Scene {
       }
     }
 
+    if (this.fxThermoOff > 0) this.fxThermoOff -= delta;
     if (inGame) {
       this.drawThermo();
       if (!this.display) this.drawVfd();

@@ -1,4 +1,5 @@
-import type { ShiftDef, Text, WorldState } from './types';
+import { newSeed, seedFrom } from './random';
+import type { AmbientState, ShiftDef, Text, WorldState } from './types';
 
 export const SAVE_VERSION = 1;
 export const SHIFT_END_MINUTES = 360;
@@ -16,9 +17,15 @@ export function formatTime(minutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-export function createState(shift: ShiftDef, playerName: string): WorldState {
+export function emptyAmbient(): AmbientState {
+  return { last: {}, count: {}, log: [], quietUntil: 0, lastAt: 0, lastScene: 0, dip: null, cam: null, floorItem: false };
+}
+
+export function createState(shift: ShiftDef, playerName: string, seed: number = newSeed()): WorldState {
   return {
     v: SAVE_VERSION,
+    seed: seed >>> 0 || 1,
+    ambient: emptyAmbient(),
     shiftId: shift.id,
     playerName,
     minutes: 0,
@@ -78,6 +85,16 @@ export function isValidState(data: unknown): data is WorldState {
     typeof s.camRounds === 'object' &&
     typeof s.triggerLog === 'object'
   );
+}
+
+/** Дополнить сохранение, сделанное до появления режиссёра тревоги (без seed и ambient). */
+export function upgradeState(s: WorldState): WorldState {
+  if (typeof s.seed !== 'number' || !Number.isFinite(s.seed) || s.seed <= 0) {
+    s.seed = seedFrom(`${s.playerName}|${s.shiftId}|${s.sales.length}|${s.clues.join(',')}`);
+  }
+  const a = (s.ambient ?? {}) as Partial<AmbientState>;
+  s.ambient = { ...emptyAmbient(), ...a, log: Array.isArray(a.log) ? a.log : [] };
+  return s;
 }
 
 export function cloneState(s: WorldState): WorldState {

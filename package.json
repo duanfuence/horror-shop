@@ -12,6 +12,7 @@
     "preview:lan": "vite preview --host --port 4173",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "report:tension": "vitest run tests/tools/tension-report.test.ts --mode report --disableConsoleIntercept",
     "e2e": "node scripts/e2e.mjs",
     "zip": "node scripts/zip.mjs"
   },

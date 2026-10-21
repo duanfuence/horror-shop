@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { shift1 } from '../src/content/shift1';
 import { collectGotoTargets } from '../src/content/shift1/scenes';
 import type { Step } from '../src/core/types';
-import { prefer, randomPolicy, rulesPolicy, simulate, type Policy } from './sim';
+import { endingScenarios, randomPolicy, rulesPolicy, simulate, type Policy } from './sim';
 
 describe('Смена 1: целостность данных', () => {
   it('все goto ведут на существующие сцены', () => {
@@ -84,46 +84,23 @@ describe('Смена 1: прохождение', () => {
   });
 
   it('продажа алкоголя и открытая дверь приводят к увольнению', async () => {
-    const policy = rulesPolicy(['Открыть дверь', 'Закрыть дверь']);
-    const base = policy.sale;
-    policy.sale = (req, s, rng) =>
-      req.items.some((i) => i.alcohol) ? { outcome: 'sold', askedName: false, overridden: true } : base(req, s, rng);
-    const r = await simulate(shift1, policy, 3);
+    const r = await simulate(shift1, endingScenarios.fired(), 3);
     expect(r.ending).toBe('fired');
     expect(r.state.violations).toEqual(expect.arrayContaining(['alcohol', 'door_open']));
   });
 
   it('отдать ключи сменщику — концовка «Подмена»', async () => {
-    const r = await simulate(shift1, rulesPolicy(['Отдать ключи']), 4);
+    const r = await simulate(shift1, endingScenarios.swap(), 4);
     expect(r.ending).toBe('swap');
   });
 
   it('открыть дверь «Галине Петровне» в темноте — концовка «Открытая дверь»', async () => {
-    const policy: Policy = {
-      ...rulesPolicy(),
-      choose(req, s, rng) {
-        if (req.prompt === 'Стучат в служебную дверь.') return prefer(req, ['Открыть']);
-        return rulesPolicy().choose(req, s, rng);
-      },
-    };
-    const r = await simulate(shift1, policy, 5);
+    const r = await simulate(shift1, endingScenarios.door(), 5);
     expect(r.ending).toBe('door');
   });
 
   it('продать третий раз мужчине в сером и бездействовать в 05:58 — «Последний покупатель»', async () => {
-    const base = rulesPolicy(['Ничего не делать']);
-    const policy: Policy = {
-      ...base,
-      choose(req, s, rng) {
-        if (req.options.some((o) => o.text.startsWith('Показать ему чек'))) return prefer(req, ['Пробить покупку']);
-        return base.choose(req, s, rng);
-      },
-      sale(req, s, rng) {
-        if (req.items.some((i) => i.productId === 'candle')) return { outcome: 'sold', askedName: true, overridden: false };
-        return base.sale(req, s, rng);
-      },
-    };
-    const r = await simulate(shift1, policy, 6);
+    const r = await simulate(shift1, endingScenarios.lastsale(), 6);
     expect(r.state.flags.greyCompleted).toBe(true);
     expect(r.ending).toBe('lastsale');
   });
@@ -135,39 +112,7 @@ describe('Смена 1: прохождение', () => {
   });
 
   it('внимательный игрок, доверившийся Косте, открывает тайную концовку', async () => {
-    const base = rulesPolicy([
-      'Ответить (линия 2)',
-      'Где ты',
-      'Это розыгрыш',
-      'Как тебе помочь',
-      'Кто — он',
-      'Как тебя зовут',
-      'Костя звонил мне',
-      'Посмотреть на камеру над кассой',
-      'Посмотреть на камеру 4',
-      'Записать',
-      'Сказал, что не увольнялся',
-    ]);
-    const policy: Policy = {
-      ...base,
-      idle(session, rng) {
-        base.idle?.(session, rng);
-        const s = session.state;
-        session.act('inspect:photo');
-        if (!s.clues.includes('temp_2022')) session.act('journal:old');
-        if (s.minutes >= 190 && s.minutes <= 215 && !s.clues.includes('cam4_kostya')) {
-          session.openCameras();
-          session.viewCamera(4);
-          session.closeCameras();
-        }
-        if (s.minutes >= 255 && s.minutes <= 265 && !s.clues.includes('cam3_empty')) {
-          session.openCameras();
-          session.viewCamera(3);
-          session.closeCameras();
-        }
-      },
-    };
-    const r = await simulate(shift1, policy, 9);
+    const r = await simulate(shift1, endingScenarios.released(), 9);
     expect(r.errors).toEqual([]);
     expect(r.state.clues.length).toBeGreaterThanOrEqual(7);
     expect(r.ending).toBe('released');

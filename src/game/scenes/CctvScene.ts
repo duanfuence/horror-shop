@@ -43,6 +43,11 @@ function placementFor(cam: number, visual: string): Placement | null {
       return { key: 'fig_storage', spot: 'cam4_fig2', meters: 1.75 };
     case '4:waving':
       return { key: 'fig_wave', spot: 'cam4_fig3', meters: 1.75 };
+    // фоновые силуэты режиссёра тревоги
+    case '1:amb_aisle':
+      return { key: 'fig_dark', spot: 'cam1_amb', meters: 1.8 };
+    case '2:amb_lot':
+      return { key: 'fig_dark', spot: 'cam2_amb', meters: 1.8 };
     default:
       return null;
   }
@@ -76,6 +81,12 @@ export class CctvScene extends Phaser.Scene {
     this.add.image(0, 0, 'vignette').setOrigin(0).setAlpha(0.9);
     this.staticBurst = this.add.tileSprite(0, 0, 320, 180, 'noise').setOrigin(0).setAlpha(0);
     this.scene.sleep();
+    const off = this.session().bus.on('fx', ({ id }) => {
+      if (id !== 'monitor_glitch' || !this.scene.isActive()) return;
+      this.staticBurst.setAlpha(0.7);
+      this.tweens.add({ targets: this.staticBurst, alpha: 0, duration: 500 });
+    });
+    this.events.once('shutdown', off);
   }
 
   show(cam: 1 | 2 | 3 | 4): void {
@@ -94,6 +105,8 @@ export class CctvScene extends Phaser.Scene {
       ...session.shift.cameraVisuals(this.cam, s, customer),
       ...session.visibleCameraEvents(this.cam).map((e) => e.visual),
     ];
+    const amb = session.ambientCameraVisual(this.cam);
+    if (amb) visuals.push(amb);
     const key = `${this.cam}|${visuals.join(',')}`;
     if (key === this.lastKey) return;
     this.lastKey = key;

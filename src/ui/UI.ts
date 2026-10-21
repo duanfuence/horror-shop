@@ -248,11 +248,14 @@ export class UI implements Presenter {
     this.platform.gameplayStart();
   }
 
+  /** Отладка: зафиксированный seed прохождения (?seed=N вместе с ?debug=1). */
+  debugSeed: number | undefined;
+
   private startNew(name: string): void {
     void this.save.saveName(name);
     void this.save.clearRun();
     this.enterGame();
-    this.session.startNew(name);
+    this.session.startNew(name, this.debugSeed);
     this.refreshHud();
   }
 

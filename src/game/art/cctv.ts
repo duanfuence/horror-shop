@@ -200,6 +200,7 @@ export function paintCam1(): HTMLCanvasElement {
   spot('cam1_customer', c, 0.3, 1.8);
   spot('cam1_vest', c, 1.6, 6.9);
   spot('cam1_relief', c, 2.4, 6.2);
+  spot('cam1_amb', c, 3.3, 7.6);
   return finish(pc);
 }
 
@@ -271,6 +272,7 @@ export function paintCam2(): HTMLCanvasElement {
   pc.hline(0, CW, CH - 12, '#454c50');
   spot('cam2_grey', c, -4.6, 14.5);
   spot('cam2_taxi', c, -1.0, 11.5);
+  spot('cam2_amb', c, 0.8, 19);
   return finish(pc, 1.25);
 }
 

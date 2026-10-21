@@ -1,4 +1,4 @@
-import { cloneState, isValidState } from './state';
+import { cloneState, isValidState, upgradeState } from './state';
 import type { WorldState } from './types';
 
 /** Абстрактное хранилище ключ-значение (localStorage или облачные данные платформы). */
@@ -73,7 +73,7 @@ export class SaveManager {
     const data = safeParse<unknown>(await this.read(KEY_RUN));
     if (!isValidState(data)) return null;
     if (!knownShifts.includes(data.shiftId) || data.endingId) return null;
-    return data;
+    return upgradeState(data);
   }
 
   /** Сохранение контрольной точки. Записи не накладываются друг на друга. */
