@@ -246,7 +246,10 @@ export class Journal {
             h(
               'li',
               { class: e.result === 'correct' ? '' : 'struck-entry' },
-              h('span', { class: 'cam-log-head', text: `${formatTime(e.m)} · камера ${e.cam} · ${CATEGORY_LABELS[e.category].toLowerCase()}` }),
+              h('span', {
+                class: 'cam-log-head',
+                text: `${formatTime(e.m)} · камера ${e.cam}${e.archive !== undefined ? ` · запись ${formatTime(e.archive)}` : ''} · ${CATEGORY_LABELS[e.category].toLowerCase()}`,
+              }),
               h('br'),
               e.text,
             ),
@@ -479,8 +482,19 @@ export class CamerasUI {
   onClose: () => void = () => {};
   onPower: (on: boolean) => void = () => {};
   onReport: (category: AnomalyCategory) => void = () => {};
+  /** Перейти к записи за минуту (null — вернуться в прямой эфир). */
+  onArchive: (minute: number | null) => void = () => {};
   /** Игрок выбирает, что именно не так на камере. */
   picking = false;
+  /** Минута записи, которую смотрит игрок; null — прямой эфир. */
+  archive: number | null = null;
+  /** Где игрок был в архиве в прошлый раз — туда же вернёт кнопка «Архив». */
+  private lastArchive: number | null = null;
+  /** Вторая отметка на записи: кнопка «↔» переключает между ней и текущей позицией. */
+  mark: number | null = null;
+  /** Игрок тянет ползунок — шкалу нельзя перерисовывать целиком. */
+  dragging = false;
+  private timeline: { slider: HTMLInputElement; label: HTMLElement; ticks: HTMLElement; markBtn: HTMLButtonElement } | null = null;
 
   constructor(private session: () => GameSession) {
     this.osd = h('div', { class: 'osd' });
@@ -506,9 +520,89 @@ export class CamerasUI {
     return this.el.isConnected;
   }
 
+  // ───────────── архив ─────────────
+
+  /** Из эфира — в запись (на прошлую позицию или за 5 минут до сейчас), из записи — в эфир. */
+  toggleArchive(): void {
+    if (this.archive !== null) {
+      this.lastArchive = this.archive;
+      this.archive = null;
+      this.picking = false;
+      this.onArchive(null);
+      this.render();
+      return;
+    }
+    const range = this.session().archiveRange();
+    if (!range) return;
+    this.archive = this.clamp(this.lastArchive ?? range[1] - 4, range);
+    this.picking = false;
+    this.onArchive(this.archive);
+    this.render();
+  }
+
+  /** Выйти из архива без запоминания (камеры закрыты, новая смена). */
+  resetArchive(): void {
+    this.archive = null;
+    this.lastArchive = null;
+    this.mark = null;
+    this.timeline = null;
+  }
+
+  seek(minute: number): void {
+    const range = this.session().archiveRange();
+    if (this.archive === null || !range) return;
+    const next = this.clamp(minute, range);
+    if (next === this.archive) return;
+    this.archive = next;
+    this.onArchive(next);
+    this.updateTimeline();
+    this.updateOsd();
+  }
+
+  step(delta: number): void {
+    if (this.archive !== null) this.seek(this.archive + delta);
+  }
+
+  /** Сравнение двух моментов: поставить отметку или перейти к ней (прежняя позиция станет отметкой). */
+  swapMark(): void {
+    if (this.archive === null) return;
+    if (this.mark === null || this.mark === this.archive) {
+      this.mark = this.archive;
+      this.updateTimeline();
+      return;
+    }
+    const prev = this.archive;
+    this.seek(this.mark);
+    this.mark = prev;
+    this.updateTimeline();
+  }
+
+  /** Время идёт — окно записи сдвигается. Вызывается раз в игровую минуту. */
+  refreshArchive(): void {
+    const range = this.session().archiveRange();
+    if (this.archive === null || !range) return;
+    const clamped = this.clamp(this.archive, range);
+    if (clamped !== this.archive) {
+      this.archive = clamped;
+      this.onArchive(clamped);
+    }
+    if (this.mark !== null && (this.mark < range[0] || this.mark > range[1])) this.mark = null;
+    this.updateTimeline();
+  }
+
+  private clamp(m: number, range: [number, number]): number {
+    return Math.max(range[0], Math.min(range[1], Math.round(m)));
+  }
+
+  // ───────────── отрисовка ─────────────
+
   render(): void {
-    const s = this.session().state;
+    const session = this.session();
+    const s = session.state;
+    const inArchive = this.archive !== null;
+    this.el.classList.toggle('archive', inArchive);
     clear(this.bar);
+    this.timeline = null;
     for (const n of [1, 2, 3, 4] as const) {
       this.bar.append(
         h('button', {
@@ -519,7 +613,7 @@ export class CamerasUI {
         }),
       );
     }
-    if (this.cam === 4) {
+    if (this.cam === 4 && !inArchive) {
       this.bar.append(
         h('button', {
           class: `cam-btn power${s.cam4On ? '' : ' off'}`,
@@ -529,9 +623,9 @@ export class CamerasUI {
         }),
       );
     }
-    const session = this.session();
+    if (inArchive) this.bar.append(this.buildTimeline());
     if (session.anomalies) {
-      const unavailable = this.cam === 4 && !s.cam4On;
+      const unavailable = !inArchive && this.cam === 4 && !s.cam4On;
       const ready = session.canReport() && !unavailable;
       this.bar.append(
         h('button', {
@@ -546,11 +640,27 @@ export class CamerasUI {
         }),
       );
     }
+    if (inArchive) {
+      const markBtn = h('button', { class: 'cam-btn mark', type: 'button', onclick: () => this.swapMark() });
+      this.timeline!.markBtn = markBtn;
+      this.bar.append(markBtn, h('button', { class: 'cam-btn live', type: 'button', text: '● Эфир', onclick: () => this.toggleArchive() }));
+    } else {
+      this.bar.append(
+        h('button', {
+          class: 'cam-btn archive-btn',
+          type: 'button',
+          text: '⏪ Запись',
+          disabled: !session.archiveRange(),
+          onclick: () => this.toggleArchive(),
+        }),
+      );
+    }
     this.bar.append(h('button', { class: 'cam-btn', type: 'button', text: '✕ Закрыть', onclick: () => this.onClose() }));
     clear(this.picker);
     this.picker.style.display = this.picking ? '' : 'none';
     if (this.picking) {
-      this.picker.append(h('div', { class: 'picker-title', text: `Камера ${this.cam}: что не так?` }));
+      const when = inArchive ? `запись ${formatTime(this.archive!)}` : 'эфир';
+      this.picker.append(h('div', { class: 'picker-title', text: `Камера ${this.cam}, ${when}: что не так?` }));
       (Object.keys(CATEGORY_LABELS) as AnomalyCategory[]).forEach((cat, i) => {
         this.picker.append(
           h('button', {
@@ -563,8 +673,49 @@ export class CamerasUI {
       });
       this.picker.append(h('button', { class: 'cam-btn', type: 'button', text: 'Отмена', onclick: () => ((this.picking = false), this.render()) }));
     }
-    this.nosignal.style.display = this.cam === 4 && !s.cam4On ? '' : 'none';
+    this.updateTimeline();
     this.updateOsd();
+  }
+
+  private buildTimeline(): HTMLElement {
+    const slider = h('input', { class: 'cam-range', type: 'range', step: 1, 'aria-label': 'Время записи' }) as HTMLInputElement;
+    // Шкала не перерисовывается при перетаскивании: меняются только время и картинка.
+    slider.addEventListener('input', () => this.seek(Number(slider.value)));
+    slider.addEventListener('pointerdown', () => (this.dragging = true));
+    for (const ev of ['pointerup', 'pointercancel', 'change', 'blur']) slider.addEventListener(ev, () => (this.dragging = false));
+    const label = h('span', { class: 'cam-time' });
+    const ticks = h('div', { class: 'cam-ticks', 'aria-hidden': 'true' });
+    this.timeline = { slider, label, ticks, markBtn: null as unknown as HTMLButtonElement };
+    return h(
+      'div',
+      { class: 'cam-timeline' },
+      h('button', { class: 'cam-btn step', type: 'button', text: '◀', 'aria-label': 'Минуту назад', onclick: () => this.step(-1) }),
+      h('div', { class: 'cam-track' }, ticks, slider),
+      h('button', { class: 'cam-btn step', type: 'button', text: '▶', 'aria-label': 'Минуту вперёд', onclick: () => this.step(1) }),
+      label,
+    );
+  }
+
+  private updateTimeline(): void {
+    const t = this.timeline;
+    const session = this.session();
+    const range = session.archiveRange();
+    if (!t || this.archive === null || !range) return;
+    t.slider.min = String(range[0]);
+    t.slider.max = String(range[1]);
+    t.slider.value = String(this.archive);
+    t.label.textContent = formatTime(this.archive);
+    // Отметки: когда на этой камере что-то менялось (что именно — не сказано) и отметка игрока.
+    clear(t.ticks);
+    const span = Math.max(1, range[1] - range[0]);
+    const pos = (m: number) => `${((m - range[0]) / span) * 100}%`;
+    for (const m of session.archiveMarks(this.cam)) t.ticks.append(h('i', { style: `left:${pos(m)}` }));
+    if (this.mark !== null) t.ticks.append(h('b', { style: `left:${pos(this.mark)}` }));
+    if (t.markBtn) {
+      const canJump = this.mark !== null && this.mark !== this.archive;
+      t.markBtn.textContent = canJump ? `↔ ${formatTime(this.mark!)}` : '★ Отметка';
+      t.markBtn.title = canJump ? 'Перейти к отметке (текущее время станет отметкой)' : 'Запомнить это время для сравнения';
+    }
   }
 
   tick(dt: number): void {
@@ -573,11 +724,25 @@ export class CamerasUI {
   }
 
   private updateOsd(): void {
-    const s = this.session().state;
-    // Аномалия может подменить время на одной из камер.
-    const fake = this.session().anomalyOsd(this.cam);
-    const t = fake ? `${fake}:00` : `${formatTime(s.minutes)}:${String(Math.floor(this.seconds)).padStart(2, '0')}`;
+    const session = this.session();
+    const s = session.state;
     clear(this.osd);
+    if (this.archive !== null) {
+      const visuals = session.archiveVisuals(this.cam, this.archive);
+      this.nosignal.style.display = visuals.includes('off') ? '' : 'none';
+      this.osd.append(
+        h('span', { class: 'play', text: '◀◀ ЗАПИСЬ' }),
+        ` · CAM 0${this.cam} · ${CAM_NAMES[this.cam]}`,
+        h('br'),
+        `15.11.25  ${session.archiveOsd(this.cam, this.archive)}:00  `,
+        h('span', { class: 'play', text: '▶ PLAY' }),
+      );
+      return;
+    }
+    this.nosignal.style.display = this.cam === 4 && !s.cam4On ? '' : 'none';
+    // Аномалия может подменить время на одной из камер.
+    const fake = session.anomalyOsd(this.cam);
+    const t = fake ? `${fake}:00` : `${formatTime(s.minutes)}:${String(Math.floor(this.seconds)).padStart(2, '0')}`;
     this.osd.append(
       `CAM 0${this.cam} · ${CAM_NAMES[this.cam]}`,
       h('br'),

@@ -1245,6 +1245,92 @@ button {
   text-decoration: none;
 }
 
+/* архив камер */
+.cctv-ui.archive .osd {
+  color: #ffe2a8;
+}
+
+.cctv-ui .osd .play {
+  color: #ffc861;
+  animation: blink 1.4s infinite;
+}
+
+.cctv-ui.archive .bar .cam-btn {
+  border-color: #6a5a32;
+}
+
+.cam-btn.archive-btn,
+.cam-btn.mark {
+  color: #ffe2a8;
+}
+
+.cam-btn.live {
+  border-color: #7a2f29;
+  color: #ffd0c8;
+}
+
+.cam-timeline {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  max-width: 44em;
+  margin: 0 auto;
+}
+
+.cam-btn.step {
+  min-width: var(--tap);
+  padding: 0.3em 0.4em;
+}
+
+.cam-track {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.cam-range {
+  width: 100%;
+  margin: 0;
+  accent-color: #ffc861;
+  height: var(--tap);
+  cursor: pointer;
+}
+
+.cam-ticks {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 2px;
+  height: 6px;
+  pointer-events: none;
+}
+
+.cam-ticks i,
+.cam-ticks b {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 6px;
+  background: rgba(223, 247, 234, 0.55);
+  transform: translateX(-1px);
+}
+
+.cam-ticks b {
+  background: #ffc861;
+  height: 10px;
+  top: -2px;
+}
+
+.cam-time {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+  text-align: center;
+  color: #ffe2a8;
+}
+
 .cctv-ui .nosignal {
   position: absolute;
   inset: 0;

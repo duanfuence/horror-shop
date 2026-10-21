@@ -201,6 +201,8 @@ export function paintCam1(): HTMLCanvasElement {
   spot('cam1_vest', c, 1.6, 6.9);
   spot('cam1_relief', c, 2.4, 6.2);
   spot('cam1_amb', c, 3.3, 7.6);
+  spot('cam1_fridge', c, 3.9, 5.6);
+  spot('cam1_near', c, 2.3, 2.6);
   return finish(pc);
 }
 
@@ -273,6 +275,8 @@ export function paintCam2(): HTMLCanvasElement {
   spot('cam2_grey', c, -4.6, 14.5);
   spot('cam2_taxi', c, -1.0, 11.5);
   spot('cam2_amb', c, 0.8, 19);
+  spot('cam2_entry1', c, -1.8, 12.4);
+  spot('cam2_entry2', c, -2.5, 9.6);
   spot('cam2_walk1', c, -1.2, 12.8);
   spot('cam2_dog1', c, -0.5, 12.6);
   spot('cam2_walk2', c, 0.4, 13.6);
@@ -619,6 +623,35 @@ export function paintCam4Hand(): HTMLCanvasElement {
       pc.ellipse(cx + dx, cy + dy, 2.2, len / 2, frost);
     }
   }, 1.0);
+}
+
+/** Полоса помех «зажёванной» кассеты — на записи всех камер в одну и ту же минуту. */
+export function paintTapeBand(): HTMLCanvasElement {
+  const pc = new PixelCanvas(CW, CH);
+  const rnd = seeded(77);
+  const top = 92;
+  for (let y = top; y < top + 22; y++) {
+    const shift = Math.round((rnd() - 0.5) * 10);
+    for (let x = 0; x < CW; x++) {
+      const r = rnd();
+      if (r < 0.45) pc.px(x + shift, y, r < 0.15 ? '#f2fff8' : '#9fb3a8');
+    }
+  }
+  pc.rect(0, top + 9, CW, 2, '#e8f5ee');
+  return pc.commit();
+}
+
+/** Тёмный вертикальный «мазок» плёнки — издалека похож на фигуру. */
+export function paintTapeSmear(): HTMLCanvasElement {
+  const pc = new PixelCanvas(CW, CH);
+  const rnd = seeded(91);
+  const cx = 196;
+  for (let y = 40; y < 150; y++) {
+    const w = 5 + Math.sin((y - 40) / 14) * 3 + rnd() * 3;
+    const x0 = cx + Math.round(Math.sin(y / 9) * 2);
+    for (let x = x0 - w; x < x0 + w; x++) if (rnd() < 0.7) pc.px(x, y, '#0d110f');
+  }
+  return pc.commit();
 }
 
 /** Пятно света из открытой служебной двери. */

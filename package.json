@@ -15,6 +15,7 @@
     "report:tension": "vitest run tests/tools/tension-report.test.ts --mode report --disableConsoleIntercept",
     "e2e": "node scripts/e2e.mjs",
     "e2e:anomalies": "node scripts/anomaly-check.mjs",
+    "e2e:archive": "node scripts/archive-check.mjs",
     "zip": "node scripts/zip.mjs"
   },
   "engines": {

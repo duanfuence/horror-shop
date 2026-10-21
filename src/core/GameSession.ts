@@ -1,6 +1,7 @@
 import { EventBus } from './EventBus';
 import type { Presenter, SaleItemView } from './Presenter';
 import { AnomalySystem, type ReportResult } from './Anomalies';
+import { archiveRange, changeMarks, frameAt, markViewed, recordFrame } from './Archive';
 import { randInt } from './random';
 import { createState, formatTime, parseTime, resolveText, SHIFT_END_MINUTES, upgradeState } from './state';
 import { TensionDirector, type DirectorHost } from './TensionDirector';
@@ -134,6 +135,7 @@ export class GameSession {
   startNew(playerName: string, seed?: number): void {
     this.reset(createState(this.shift, playerName, seed));
     this.status = 'running';
+    this.recordArchive();
     this.runScene(this.shift.startScene, this.shift.scenes[this.shift.startScene]);
   }
 
@@ -143,6 +145,7 @@ export class GameSession {
     delete this.state.flags.customer;
     delete this.state.flags.saleActive;
     this.status = 'running';
+    this.recordArchive();
     this.bus.emit('lights', { mode: this.state.lights });
     this.bus.emit('door', { door: 'service', state: this.state.serviceDoor });
     this.bus.emit('flashlight', { on: Boolean(this.state.flags.flashlight) });
@@ -240,6 +243,7 @@ export class GameSession {
     if (this.director && this.status === 'running' && s.minutes < SHIFT_END_MINUTES) {
       this.director.onMinute(this.directorHost);
     }
+    if (this.status === 'running') this.recordArchive();
     if (!this.busy && s.minutes % 5 === 0) this.checkpoint();
   }
 
@@ -397,6 +401,8 @@ export class GameSession {
         s.flags.customer = `${step.who}:${this.customer.variant}`;
         if (step.bell !== false) this.bus.emit('sfx', { id: 'bell' });
         this.bus.emit('customer', this.customer);
+        // Покупатель попадает на запись в ту минуту, когда вошёл, даже если часы стоят на диалоге.
+        this.recordArchive();
         await this.presenter.wait(700);
         this.check(token);
         return 'continue';
@@ -684,6 +690,74 @@ export class GameSession {
   anomalyOsd(cam: CamId): string | null {
     if (!this.anomalies || !this.camAvailable(cam)) return null;
     return this.anomalies.osd(this.state, cam);
+  }
+
+  // ───────────── архив камер ─────────────
+
+  /** Что сейчас попадает на запись камеры: всё, что видно в эфире, плюс то, что видно только на записи. */
+  private recordedNow(cam: CamId): { visuals: string[]; refs: string[] } {
+    const customer = this.customer?.id ?? null;
+    const visuals = [
+      ...this.shift.cameraVisuals(cam, this.state, customer),
+      ...this.visibleCameraEvents(cam).map((e) => e.visual),
+    ];
+    if (!this.camAvailable(cam) || !this.anomalies) return { visuals, refs: [] };
+    const rec = this.anomalies.recorded(this.state, cam);
+    return { visuals: [...visuals, ...rec.visuals], refs: rec.refs };
+  }
+
+  /** Записать текущую минуту на «кассету» (раз в игровую минуту и когда входит покупатель). */
+  private recordArchive(): void {
+    for (const cam of [1, 2, 3, 4] as const) {
+      const { visuals, refs } = this.recordedNow(cam);
+      recordFrame(this.state.archive, cam, this.state.minutes, visuals, refs);
+    }
+  }
+
+  /** Доступный промежуток записи [от, до] в игровых минутах. */
+  archiveRange(): [number, number] | null {
+    return archiveRange(this.state.archive, this.state.minutes);
+  }
+
+  /** Что было на камере в минуту minute (визуальные ключи для экрана камер). Мир не меняется. */
+  archiveVisuals(cam: CamId, minute: number): string[] {
+    return frameAt(this.state.archive, cam, minute)?.[1] ?? [];
+  }
+
+  /** Время, которое камера показывала на записи (часы камеры тоже могли врать). */
+  archiveOsd(cam: CamId, minute: number): string {
+    const fake = this.archiveVisuals(cam, minute).find((v) => v.startsWith('osd:'));
+    return fake ? fake.slice(4) : formatTime(minute);
+  }
+
+  /** Минуты, когда на камере что-то менялось, — отметки на шкале архива. */
+  archiveMarks(cam: CamId): number[] {
+    const range = this.archiveRange();
+    return range ? changeMarks(this.state.archive, cam, range) : [];
+  }
+
+  /**
+   * Игрок смотрит запись камеры за минуту minute. Ничего в мире не запускает:
+   * только запоминает, что этот момент просмотрен (для сверки неполных наблюдений).
+   */
+  viewArchive(cam: CamId, minute: number): string[] {
+    this.viewing = null;
+    markViewed(this.state.archive, cam, minute);
+    return this.archiveVisuals(cam, minute);
+  }
+
+  /** Фиксация наблюдения по записи. */
+  reportArchive(cam: CamId, minute: number, category: AnomalyCategory): ReportResult {
+    if (this.status !== 'running' || !this.anomalies) return { result: 'busy', text: '' };
+    const frame = frameAt(this.state.archive, cam, minute);
+    const res = this.anomalies.reportArchive(this.directorHost, cam, minute, category, {
+      visuals: frame?.[1] ?? [],
+      refs: frame?.[2] ?? [],
+    });
+    if (res.text) this.bus.emit('toast', { text: res.text });
+    if (res.result !== 'busy' && res.result !== 'duplicate') this.bus.emit('journal:new', { tab: 'cams' });
+    this.bus.emit('state:changed');
+    return res;
   }
 
   /** Можно ли сейчас сделать запись в журнал наблюдений. */

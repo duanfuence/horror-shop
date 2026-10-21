@@ -16,6 +16,8 @@ export interface StageBridge {
   setMode(mode: 'menu' | 'game'): void;
   openCctv(cam: 1 | 2 | 3 | 4): void;
   closeCctv(): void;
+  /** Показать на экране камер запись за минуту (null — прямой эфир). */
+  setCctvArchive(minute: number | null): void;
   setEffects(on: boolean): void;
   /** Перевести координаты сцены (320×180) в пиксели внутри #stage-wrap. */
   toScreen(x: number, y: number): { x: number; y: number };
@@ -105,8 +107,15 @@ export class UI implements Presenter {
     this.cams.onSwitch = (cam) => this.switchCam(cam);
     this.cams.onClose = () => this.closeCameras();
     this.cams.onReport = (category) => {
-      this.session.reportAnomaly(this.cams.cam, category);
+      if (this.cams.archive !== null) this.session.reportArchive(this.cams.cam, this.cams.archive, category);
+      else this.session.reportAnomaly(this.cams.cam, category);
       this.audio.play('page');
+    };
+    this.cams.onArchive = (minute) => {
+      this.stage.setCctvArchive(minute);
+      // Просмотр записи ничего не меняет в мире; возврат в эфир — обычный взгляд на камеру.
+      if (minute !== null) this.session.viewArchive(this.cams.cam, minute);
+      else this.session.viewCamera(this.cams.cam);
     };
     this.cams.onPower = (on) => {
       this.session.setCam4(on);
@@ -128,7 +137,13 @@ export class UI implements Presenter {
     bus.on('sfx', ({ id }) => this.audio.play(id));
     // Журнал наблюдений освобождается со временем — обновить кнопку «Зафиксировать».
     bus.on('clock:minute', () => {
-      if (this.cams.isOpen && !this.cams.picking) this.cams.render();
+      if (!this.cams.isOpen || this.cams.picking) return;
+      // Пока тянут ползунок записи, шкалу не пересоздаём — только сдвигаем её границы.
+      if (this.cams.archive !== null && this.cams.dragging) this.cams.refreshArchive();
+      else {
+        this.cams.refreshArchive();
+        this.cams.render();
+      }
     });
     bus.on('journal:new', ({ tab }) => {
       this.journal.markNew(tab);
@@ -480,7 +495,9 @@ export class UI implements Presenter {
     this.lastCam = cam;
     this.cams.picking = false;
     this.cams.cam = cam;
-    this.session.viewCamera(cam);
+    // В режиме записи переключение камер показывает ту же минуту на другой камере.
+    if (this.cams.archive !== null) this.session.viewArchive(cam, this.cams.archive);
+    else this.session.viewCamera(cam);
     this.stage.openCctv(cam);
     this.bus.emit('cctv', { cam });
     this.audio.play('static');
@@ -490,6 +507,9 @@ export class UI implements Presenter {
 
   private closeCameras(): void {
     if (!this.cams?.isOpen) return;
+    if (this.cams.archive !== null) this.stage.setCctvArchive(null);
+    this.cams.resetArchive();
+    this.cams.picking = false;
     this.cams.el.remove();
     this.app.classList.remove('cctv-open');
     this.stage.closeCctv();
@@ -536,13 +556,20 @@ export class UI implements Presenter {
   // ═══════════════ клавиатура ═══════════════
 
   private onKey(e: KeyboardEvent): void {
-    if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+    // Текстовые поля (имя) печатают сами; ползунок записи — нет, кроме стрелок (их он двигает сам).
+    const target = e.target as HTMLInputElement | null;
+    const onRange = target?.tagName === 'INPUT' && target.type === 'range';
+    if (target?.tagName === 'INPUT' && !onRange) return;
     const code = e.code;
     if (code === 'Escape') {
       if (this.closeDoorMenu) {
         this.closeDoorMenu();
         this.closeDoorMenu = null;
       } else if (this.modals.openId) this.modals.close();
+      else if (this.cams.isOpen && this.cams.picking) {
+        this.cams.picking = false;
+        this.cams.render();
+      } else if (this.cams.isOpen && this.cams.archive !== null) this.cams.toggleArchive();
       else if (this.cams.isOpen) this.closeCameras();
       else this.pause();
       e.preventDefault();
@@ -558,6 +585,16 @@ export class UI implements Presenter {
       if (code === 'KeyF' && this.session.canReport()) {
         this.cams.picking = !this.cams.picking;
         return this.cams.render();
+      }
+      if (code === 'KeyR') return this.cams.toggleArchive();
+      if (this.cams.archive !== null) {
+        if (code === 'ArrowLeft' || code === 'ArrowRight') {
+          if (onRange) return;
+          this.cams.step((code === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 5 : 1));
+          e.preventDefault();
+          return;
+        }
+        if (code === 'KeyM') return this.cams.swapMark();
       }
       if (code === 'ArrowRight') return this.switchCam((((this.cams.cam % 4) + 1) as 1 | 2 | 3 | 4));
       if (code === 'ArrowLeft') return this.switchCam(((((this.cams.cam + 2) % 4) + 1) as 1 | 2 | 3 | 4));

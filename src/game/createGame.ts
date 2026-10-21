@@ -81,7 +81,9 @@ export function createGame(deps: GameDeps): Promise<StageBridge & { game: Phaser
         store.sys.setVisible(false);
         cctv.show(cam);
       },
+      setCctvArchive: (minute) => cctv.setArchive(minute),
       closeCctv: () => {
+        cctv.setArchive(null);
         store.sys.setVisible(true);
         if (game.scene.isActive('cctv')) game.scene.sleep('cctv');
       },

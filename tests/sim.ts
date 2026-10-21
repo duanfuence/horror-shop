@@ -39,8 +39,10 @@ export interface SimResult {
   temps: number[];
   /** События шины 'fx' и 'ambient', как их видят сцена и звук. */
   fxLog: [string, number][];
-  /** Наибольшее число одновременно активных аномалий за смену. */
+  /** Наибольшее число одновременно активных аномалий за смену (видимых в эфире). */
   maxActiveAnomalies: number;
+  /** Наибольшее число одновременно активных архивных аномалий. */
+  maxArchiveAnomalies: number;
   /** Сколько раз на одной камере оказывалось больше одной аномалии (должно быть 0). */
   sameCamAnomalies: number;
 }
@@ -113,11 +115,18 @@ export async function simulate(
     temps[minutes] = session.temperature();
   });
   let sameCamAnomalies = 0;
+  let maxArchiveAnomalies = 0;
   bus.on('state:changed', () => {
     if (!session) return;
     const active = session.state.anomalies.active;
-    maxActiveAnomalies = Math.max(maxActiveAnomalies, active.length);
-    if (new Set(active.map((a) => a.cam)).size !== active.length) sameCamAnomalies++;
+    const archived = active.filter((a) => session.anomalies?.def(a.id)?.archiveOnly).length;
+    maxActiveAnomalies = Math.max(maxActiveAnomalies, active.length - archived);
+    maxArchiveAnomalies = Math.max(maxArchiveAnomalies, archived);
+    // На одной камере — не больше одной эфирной и одной архивной.
+    for (const kind of [false, true]) {
+      const cams = active.filter((a) => !!session.anomalies?.def(a.id)?.archiveOnly === kind).map((a) => a.cam);
+      if (new Set(cams).size !== cams.length) sameCamAnomalies++;
+    }
   });
   try {
     session = new GameSession(shift, bus, presenter);
@@ -146,6 +155,7 @@ export async function simulate(
     temps,
     fxLog,
     maxActiveAnomalies,
+    maxArchiveAnomalies,
     sameCamAnomalies,
   };
 }
@@ -416,7 +426,7 @@ export function observerPolicy(opts: { every?: number; accuracy?: number; respec
       for (const cam of [1, 2, 3, 4] as const) {
         if (cam === 4 && opts.respectCold !== false && session.temperature() < 0) continue;
         session.viewCamera(cam);
-        const a = s.anomalies.active.find((x) => x.cam === cam);
+        const a = s.anomalies.active.find((x) => x.cam === cam && !session.anomalies!.def(x.id)?.archiveOnly);
         const def = a && session.anomalies.def(a.id);
         if (!def || !session.canReport()) continue;
         // обычные вещи наблюдатель иногда тоже принимает за странность
@@ -424,6 +434,44 @@ export function observerPolicy(opts: { every?: number; accuracy?: number; respec
         const right = rng() < accuracy;
         const cat = right ? def.categories[0] : cats[Math.floor(rng() * cats.length)];
         session.reportAnomaly(cam, cat);
+      }
+      session.closeCameras();
+    },
+  };
+}
+
+/**
+ * Архивист: как наблюдатель, но раз в `every` минут перематывает запись всех камер
+ * и фиксирует то, что нашёл на ней (в том числе пропущенное в эфире). Для неполных наблюдений
+ * сначала сверяется с камерой, которую требует аномалия.
+ */
+export function archivistPolicy(opts: { every?: number } = {}): Policy {
+  const every = opts.every ?? 15;
+  const base = observerPolicy();
+  return {
+    ...base,
+    idle(session, rng) {
+      base.idle?.(session, rng);
+      const s = session.state;
+      const sys = session.anomalies;
+      const range = session.archiveRange();
+      if (s.minutes % every !== 0 || !sys || !range) return;
+      session.openCameras();
+      for (let m = Math.max(range[0], range[1] - every); m <= range[1]; m++) {
+        for (const cam of [1, 2, 3, 4] as const) {
+          if (!session.canReport()) break;
+          const refs = s.archive.tracks[String(cam)].filter((f) => f[0] <= m).at(-1)?.[2] ?? [];
+          for (const id of refs) {
+            const d = sys.def(id);
+            if (!d || d.danger === 0) continue;
+            if (s.anomalies.log.some((e) => e.ref === id || e.ref === `${id}+`)) continue;
+            if (s.anomalies.outcomes.some(([x, o]) => x === id && o === 'reported')) continue;
+            for (const c of d.confirm?.cams ?? []) session.viewArchive(c, m);
+            session.viewArchive(cam, m);
+            session.reportArchive(cam, m, d.categories[0]);
+            break;
+          }
+        }
       }
       session.closeCameras();
     },

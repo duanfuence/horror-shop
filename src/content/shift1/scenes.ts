@@ -931,7 +931,7 @@ export const scenes: Record<string, Step[]> = {
             narr('На мониторе — касса сверху. За прилавком — вы. Перед прилавком никого нет.'),
             fx(clue('relief_no_cam'), set('reliefExposed')),
           ],
-          { loop: true, tone: 'insight', if: any(hasClue('cam3_empty'), hasClue('vest_cam1')) },
+          { loop: true, tone: 'insight', if: any(hasClue('cam3_empty'), hasClue('vest_cam1'), hasClue('archive_entry')) },
         ),
         opt('Нет. Ключи останутся у меня.', [goto('relief_wait')]),
       ],
@@ -1046,6 +1046,16 @@ export const scenes: Record<string, Step[]> = {
     choice([
       opt('Тихо.', [say('gp', 'Тихо у неё…'), narr('Галина Петровна смотрит на монитор камер дольше, чем нужно.')]),
       opt('Странная.', [say('gp', 'Здесь все ночи странные. Привыкнешь. Или нет.')]),
+      opt(
+        'На записи камер ночью кто-то ходил. Склад открывался сам.',
+        [
+          say('gp', 'Ты что, записи пересматриваешь?'),
+          narr('Она молча вынимает кассету из видеомагнитофона и кладёт в сумку.'),
+          say('gp', 'Их никто не смотрит. Кассета на час — к утру всё перезаписывается. Так и должно быть.'),
+          fx(set('gpTookTape')),
+        ],
+        { if: any(hasClue('archive_door'), hasClue('archive_figure'), hasClue('archive_entry')), tone: 'insight' },
+      ),
       opt(
         'Свет выключался. И кто-то приходил меня сменить.',
         [say('gp', '…'), say('gp', 'Ключи у тебя?'), when(hasItem('keys'), [say('gp', 'Хорошо. Хорошо.')])],

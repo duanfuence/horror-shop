@@ -290,11 +290,105 @@ export const anomalyDefs: AnomalyDef[] = [
   },
 ];
 
+// ─────────── только на записи (архив камер) ───────────
+// В прямом эфире их не видно: камера в ту минуту показывала обычную картинку.
+// Найти можно, перематывая запись, — и сравнивая её с настоящим и с другими камерами.
+anomalyDefs.push(
+  {
+    id: 'rec_door',
+    cams: [4],
+    danger: 2,
+    categories: ['door'],
+    weight: 0.9,
+    archiveOnly: true,
+    from: '01:10',
+    to: '04:40',
+    duration: 6,
+    cooldown: 999,
+    max: 1,
+    // Только пока дверь действительно закрыта и не рядом со стуком в 03:40.
+    when: (s) => warm(s) && s.serviceDoor === 'closed' && (s.minutes < 192 || s.minutes > 232),
+    stages: [
+      { at: 0, visuals: ['door_open', 'door_figure'] },
+      { at: 3, visuals: ['door_open'] },
+    ],
+    report: {
+      text: 'Служебная дверь на записи открыта, в проёме кто-то стоит. Ключ всё это время был у вас.',
+      steps: [fx(clue('archive_door'))],
+    },
+  },
+  {
+    id: 'rec_figure',
+    cams: [1],
+    danger: 2,
+    categories: ['person'],
+    weight: 0.9,
+    archiveOnly: true,
+    from: '01:00',
+    to: '04:40',
+    duration: 6,
+    cooldown: 999,
+    max: 1,
+    when: (s, cam) => noCustomer(s) && clearOfStory(s, cam, 6),
+    stages: [
+      { at: 0, visuals: ['rec_fridge_fig'] },
+      { at: 3, visuals: ['rec_near_fig'] },
+    ],
+    report: {
+      text: 'На записи человек в жилетке идёт от холодильников к кассе. В эфире в эти минуты зал был пуст.',
+      steps: [fx(clue('archive_figure'))],
+    },
+  },
+  {
+    id: 'rec_entry',
+    cams: [2],
+    danger: 2,
+    categories: ['person'],
+    weight: 0.9,
+    archiveOnly: true,
+    from: '00:50',
+    to: '04:40',
+    duration: 4,
+    cooldown: 999,
+    max: 1,
+    when: (s, cam) => noCustomer(s) && clearOfStory(s, cam, 4),
+    stages: [
+      { at: 0, visuals: ['rec_entry1'] },
+      { at: 2, visuals: ['rec_entry2'] },
+    ],
+    // Одна камера ещё ничего не доказывает: может, просто покупатель.
+    report: { text: 'На записи камеры 2 человек в жилетке подходит к двери магазина. Покупатель? Стоит проверить зал.' },
+    confirm: {
+      cams: [1],
+      within: 2,
+      text: 'Камера 2: человек в жилетке входит в магазин. Камера 1 в ту же минуту: в зале никого, колокольчик не звенел.',
+      steps: [fx(clue('archive_entry'))],
+    },
+  },
+  {
+    id: 'rec_glitch',
+    cams: [1, 2, 3, 4],
+    danger: 0,
+    categories: ['person', 'image'],
+    weight: 0.8,
+    archiveOnly: true,
+    from: '00:40',
+    to: '04:40',
+    duration: 2,
+    cooldown: 60,
+    max: 2,
+    // Тёмный «силуэт» на одной камере — но полоса помех в эту минуту на записи всех камер.
+    stages: [{ at: 0, visuals: ['ov:tape_smear'], everywhere: ['ov:tape_band'] }],
+    report: { text: 'Перемотка соседних камер: в эту минуту на всех та же полоса помех. Это не человек — кассета зажевала плёнку.' },
+  },
+);
+
 const strangeFigure = 'Записано: на складе стоит человек. Склад заперт.';
 
 export const anomalies: AnomalyConfig = {
   defs: anomalyDefs,
   maxActive: 2,
+  maxArchive: 1,
   rate: (s) => {
     const h = s.minutes / 60;
     return Math.max(0, Math.min(0.3, 0.09 + h * 0.02 + Math.min(6, s.stats.attention) * 0.01));

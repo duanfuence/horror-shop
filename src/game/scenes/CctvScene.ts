@@ -61,6 +61,15 @@ function placementFor(cam: number, visual: string): Placement | null {
       return { key: 'top_dark', spot: 'cam3_behind2', px: 40, alpha: 0.9 };
     case '4:door_figure':
       return { key: 'fig_vest_front', spot: 'cam4_door', meters: 1.75, alpha: 0.8 };
+    // видно только на записи (архив камер)
+    case '1:rec_fridge_fig':
+      return { key: 'fig_vest_front', spot: 'cam1_fridge', meters: 1.75, alpha: 0.9 };
+    case '1:rec_near_fig':
+      return { key: 'fig_vest_front', spot: 'cam1_near', meters: 1.75, alpha: 0.9 };
+    case '2:rec_entry1':
+      return { key: 'fig_vest_front', spot: 'cam2_entry1', meters: 1.75 };
+    case '2:rec_entry2':
+      return { key: 'fig_vest_front', spot: 'cam2_entry2', meters: 1.75 };
     // фоновые силуэты режиссёра тревоги
     case '1:amb_aisle':
       return { key: 'fig_dark', spot: 'cam1_amb', meters: 1.8 };
@@ -83,6 +92,11 @@ export class CctvScene extends Phaser.Scene {
   private frost!: Phaser.GameObjects.Image;
   private lastKey = '';
   private refreshTimer = 0;
+  /** Минута записи, которую показывает экран; null — прямой эфир. */
+  private archive: number | null = null;
+  /** Вид «кассеты»: тёплый оттенок старой плёнки и широкая полоса трекинга. */
+  private tapeTint!: Phaser.GameObjects.Rectangle;
+  private tracking!: Phaser.GameObjects.TileSprite;
 
   constructor(private session: () => GameSession) {
     super({ key: 'cctv' });
@@ -97,6 +111,8 @@ export class CctvScene extends Phaser.Scene {
     this.noise = this.add.tileSprite(0, 0, 320, 180, 'noise').setOrigin(0).setAlpha(0.1);
     this.band = this.add.rectangle(0, 0, 320, 10, 0xdfffee, 0.06).setOrigin(0);
     this.add.image(0, 0, 'vignette').setOrigin(0).setAlpha(0.9);
+    this.tapeTint = this.add.rectangle(0, 0, 320, 180, 0xffd9a0, 0.16).setOrigin(0).setBlendMode(Phaser.BlendModes.MULTIPLY).setVisible(false);
+    this.tracking = this.add.tileSprite(0, 0, 320, 7, 'noise').setOrigin(0).setAlpha(0.35).setVisible(false);
     this.staticBurst = this.add.tileSprite(0, 0, 320, 180, 'noise').setOrigin(0).setAlpha(0);
     this.scene.sleep();
     const off = this.session().bus.on('fx', ({ id }) => {
@@ -115,16 +131,39 @@ export class CctvScene extends Phaser.Scene {
     this.tweens.add({ targets: this.staticBurst, alpha: 0, duration: 260 });
   }
 
+  /**
+   * Показать запись за минуту (null — прямой эфир). Кадр строится из записанного списка
+   * визуальных ключей тем же кодом, что и эфир; пересоздаются только изменившиеся слои.
+   */
+  setArchive(minute: number | null): void {
+    const modeChanged = (minute === null) !== (this.archive === null);
+    this.archive = minute;
+    this.tapeTint.setVisible(minute !== null);
+    this.tracking.setVisible(minute !== null);
+    this.noise.setAlpha(minute !== null ? 0.18 : 0.1);
+    this.refresh();
+    if (modeChanged) {
+      this.staticBurst.setAlpha(0.8);
+      this.tweens.add({ targets: this.staticBurst, alpha: 0, duration: 320 });
+    }
+  }
+
   private refresh(): void {
     const session = this.session();
     const s = session.state;
-    const customer = session.customer?.id ?? null;
-    const visuals = [
-      ...session.shift.cameraVisuals(this.cam, s, customer),
-      ...session.visibleCameraEvents(this.cam).map((e) => e.visual),
-    ];
-    visuals.push(...session.anomalyVisuals(this.cam));
-    const key = `${this.cam}|${visuals.join(',')}`;
+    let visuals: string[];
+    if (this.archive !== null) {
+      visuals = session.archiveVisuals(this.cam, this.archive);
+      if (!visuals.length) visuals = ['off'];
+    } else {
+      const customer = session.customer?.id ?? null;
+      visuals = [
+        ...session.shift.cameraVisuals(this.cam, s, customer),
+        ...session.visibleCameraEvents(this.cam).map((e) => e.visual),
+        ...session.anomalyVisuals(this.cam),
+      ];
+    }
+    const key = `${this.archive ?? 'live'}|${this.cam}|${visuals.join(',')}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
     const off = visuals.includes('off');
@@ -163,6 +202,11 @@ export class CctvScene extends Phaser.Scene {
     this.noise.tilePositionY = Math.random() * 128;
     this.staticBurst.tilePositionX = Math.random() * 128;
     this.band.y = (this.band.y + delta * 0.03) % 190 - 5;
+    if (this.archive !== null) {
+      // полоса трекинга видеомагнитофона медленно ползёт снизу вверх
+      this.tracking.tilePositionX = Math.random() * 128;
+      this.tracking.y = 180 - ((this.time.now / 22) % 200);
+    }
     this.refreshTimer -= delta;
     if (this.refreshTimer <= 0) {
       this.refreshTimer = 250;

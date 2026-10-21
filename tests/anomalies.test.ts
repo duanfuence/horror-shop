@@ -65,9 +65,11 @@ describe('Аномалии: данные', () => {
   const textures = readFileSync('src/game/textures.ts', 'utf8');
   const cctvScene = readFileSync('src/game/scenes/CctvScene.ts', 'utf8');
 
-  it('12–15 различающихся аномалий с корректными полями', () => {
-    expect(anomalyDefs.length).toBeGreaterThanOrEqual(12);
-    expect(anomalyDefs.length).toBeLessThanOrEqual(15);
+  it('12–15 различающихся аномалий в эфире и не меньше четырёх архивных', () => {
+    const live = anomalyDefs.filter((d) => !d.archiveOnly);
+    expect(live.length).toBeGreaterThanOrEqual(12);
+    expect(live.length).toBeLessThanOrEqual(15);
+    expect(anomalyDefs.filter((d) => d.archiveOnly).length).toBeGreaterThanOrEqual(4);
     expect(new Set(anomalyDefs.map((d) => d.id)).size).toBe(anomalyDefs.length);
     // есть и обычные вещи-обманки, и опасные аномалии, и аномалии со стадиями
     expect(anomalyDefs.some((d) => d.danger === 0)).toBe(true);
@@ -299,6 +301,7 @@ describe('Аномалии: расписание', () => {
         const r = await simulate(shift1, policy, seed, 20000, seed * 97);
         expect(r.errors).toEqual([]);
         expect(r.maxActiveAnomalies).toBeLessThanOrEqual(shift1.anomalies!.maxActive);
+        expect(r.maxArchiveAnomalies).toBeLessThanOrEqual(shift1.anomalies!.maxArchive ?? 1);
         expect(r.sameCamAnomalies).toBe(0);
         const byId = new Map<string, number[]>();
         for (const [id, , m] of r.state.anomalies.spawned) byId.set(id, [...(byId.get(id) ?? []), m]);
@@ -346,7 +349,7 @@ describe('Аномалии: расписание', () => {
     const cold = { ...s, stats: { ...s.stats, attention: 8 } };
     expect(temperature(s)).toBeGreaterThanOrEqual(1);
     expect(temperature(cold)).toBeLessThan(0);
-    for (const d of anomalyDefs.filter((x) => x.cams.includes(4))) {
+    for (const d of anomalyDefs.filter((x) => x.cams.includes(4) && x.danger > 0)) {
       if (d.id === 'lens_frost') {
         expect(d.when!(s, 4)).toBe(false);
         expect(d.when!(cold, 4)).toBe(true);

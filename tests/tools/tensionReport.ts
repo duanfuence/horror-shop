@@ -5,6 +5,7 @@
 import { shift1 } from '../../src/content/shift1';
 import {
   cautiousPolicy,
+  archivistPolicy,
   observerPolicy,
   randomPolicy,
   riskyPolicy,
@@ -93,6 +94,7 @@ export const POLICIES: Record<string, () => Policy> = {
   risky: () => riskyPolicy(),
   observer: () => observerPolicy(),
   observer_cold: () => observerPolicy({ respectCold: false }),
+  archivist: () => archivistPolicy(),
   random: () => randomPolicy,
 };
 

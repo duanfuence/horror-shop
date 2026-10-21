@@ -54,6 +54,8 @@ export function registerTextures(scene: Phaser.Scene): void {
   add('ov_cam4_box3', cctv.paintCam4Box(3));
   add('ov_cam4_hand', cctv.paintCam4Hand());
   add('dog', cctv.paintDog());
+  add('ov_tape_band', cctv.paintTapeBand());
+  add('ov_tape_smear', cctv.paintTapeSmear());
   add('top_dark', cctv.paintTopDown('#121212', '#1f2326'));
   add('fig_vest', cctv.paintStanding(64, { vest: true, face: 'away' }));
   add('fig_vest_front', cctv.paintStanding(64, { vest: true, face: 'blank' }));

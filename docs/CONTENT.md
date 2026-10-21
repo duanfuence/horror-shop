@@ -123,6 +123,15 @@ my_scene: [
 (покупатель, продавец) — `anomalies.reportables`. Тесты: tests/anomalies.test.ts; в браузере —
 `npm run e2e:anomalies` (скриншоты каждой стадии в e2e-output/).
 
+## Архив камер
+
+Запись ведёт `src/core/Archive.ts` (изменения визуальных ключей камер по минутам, глубина
+`ARCHIVE_DEPTH`). Аномалия «только на записи» — обычная запись в `anomalies.ts` с `archiveOnly: true`:
+в эфире её не видно, на записи — видно. `everywhere: [...]` в стадии — что попадает на запись всех
+камер (полоса помех). `confirm: { cams, within, text, steps }` — неполное наблюдение: улика выдаётся,
+только если игрок в архиве посмотрел и другую камеру за ту же минуту (±within). Тесты — tests/archive.test.ts,
+в браузере — `npm run e2e:archive`.
+
 ## Новая смена
 
 1. Скопировать `src/content/shift1` в `src/content/shift2` и изменить данные.

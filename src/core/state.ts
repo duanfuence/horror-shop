@@ -1,5 +1,5 @@
 import { newSeed, seedFrom } from './random';
-import type { AmbientState, AnomalyState, ShiftDef, Text, WorldState } from './types';
+import type { AmbientState, AnomalyState, ArchiveState, ShiftDef, Text, WorldState } from './types';
 
 export const SAVE_VERSION = 1;
 export const SHIFT_END_MINUTES = 360;
@@ -25,12 +25,17 @@ export function emptyAnomalies(): AnomalyState {
   return { active: [], last: {}, count: {}, spawned: [], outcomes: [], traces: [], log: [], quietUntil: 0, reportUntil: 0 };
 }
 
+export function emptyArchive(since = 0): ArchiveState {
+  return { since, tracks: { '1': [], '2': [], '3': [], '4': [] }, viewed: [] };
+}
+
 export function createState(shift: ShiftDef, playerName: string, seed: number = newSeed()): WorldState {
   return {
     v: SAVE_VERSION,
     seed: seed >>> 0 || 1,
     ambient: emptyAmbient(),
     anomalies: emptyAnomalies(),
+    archive: emptyArchive(),
     shiftId: shift.id,
     playerName,
     minutes: 0,
@@ -110,6 +115,14 @@ export function upgradeState(s: WorldState): WorldState {
     traces: arr(an.traces),
     log: arr(an.log),
   };
+  // Архив старого сохранения начинается с момента загрузки: прошлого на записи нет.
+  const ar = s.archive as Partial<ArchiveState> | undefined;
+  if (!ar || typeof ar.tracks !== 'object' || !ar.tracks) s.archive = emptyArchive(s.minutes);
+  else {
+    const tracks = emptyArchive().tracks;
+    for (const k of Object.keys(tracks)) tracks[k] = arr(ar.tracks[k]);
+    s.archive = { since: typeof ar.since === 'number' ? ar.since : s.minutes, tracks, viewed: arr(ar.viewed) };
+  }
   return s;
 }
 
