@@ -1,5 +1,5 @@
 import { newSeed, seedFrom } from './random';
-import type { AmbientState, ShiftDef, Text, WorldState } from './types';
+import type { AmbientState, AnomalyState, ShiftDef, Text, WorldState } from './types';
 
 export const SAVE_VERSION = 1;
 export const SHIFT_END_MINUTES = 360;
@@ -18,7 +18,11 @@ export function formatTime(minutes: number): string {
 }
 
 export function emptyAmbient(): AmbientState {
-  return { last: {}, count: {}, log: [], quietUntil: 0, lastAt: 0, lastScene: 0, dip: null, cam: null, floorItem: false };
+  return { last: {}, count: {}, log: [], quietUntil: 0, lastAt: 0, lastScene: 0, dip: null, floorItem: false };
+}
+
+export function emptyAnomalies(): AnomalyState {
+  return { active: [], last: {}, count: {}, spawned: [], outcomes: [], traces: [], log: [], quietUntil: 0, reportUntil: 0 };
 }
 
 export function createState(shift: ShiftDef, playerName: string, seed: number = newSeed()): WorldState {
@@ -26,6 +30,7 @@ export function createState(shift: ShiftDef, playerName: string, seed: number = 
     v: SAVE_VERSION,
     seed: seed >>> 0 || 1,
     ambient: emptyAmbient(),
+    anomalies: emptyAnomalies(),
     shiftId: shift.id,
     playerName,
     minutes: 0,
@@ -94,6 +99,17 @@ export function upgradeState(s: WorldState): WorldState {
   }
   const a = (s.ambient ?? {}) as Partial<AmbientState>;
   s.ambient = { ...emptyAmbient(), ...a, log: Array.isArray(a.log) ? a.log : [] };
+  const an = (s.anomalies ?? {}) as Partial<AnomalyState>;
+  const arr = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
+  s.anomalies = {
+    ...emptyAnomalies(),
+    ...an,
+    active: arr(an.active),
+    spawned: arr(an.spawned),
+    outcomes: arr(an.outcomes),
+    traces: arr(an.traces),
+    log: arr(an.log),
+  };
   return s;
 }
 

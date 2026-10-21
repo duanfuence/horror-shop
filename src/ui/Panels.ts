@@ -2,7 +2,9 @@
  * Модальные окна и оверлеи игрового экрана: журнал, телефон, холодильник,
  * бумаги (чеки, СМС, памятка), меню служебной двери, интерфейс камер.
  */
+import { CATEGORY_LABELS } from '../core/Anomalies';
 import type { GameSession } from '../core/GameSession';
+import type { AnomalyCategory } from '../core/types';
 import { formatTime, resolveText } from '../core/state';
 import type { PaperView } from '../core/types';
 import { iconDataUrl } from '../game/art/items';
@@ -51,7 +53,7 @@ export class ModalHost {
 
 // ═══════════════ журнал ═══════════════
 
-export type JournalTab = 'rules' | 'regulars' | 'catalog' | 'temp' | 'notes' | 'pocket';
+export type JournalTab = 'rules' | 'regulars' | 'catalog' | 'temp' | 'notes' | 'cams' | 'pocket';
 
 const TABS: [JournalTab, string][] = [
   ['rules', 'Памятка'],
@@ -59,6 +61,7 @@ const TABS: [JournalTab, string][] = [
   ['catalog', 'Каталог'],
   ['temp', 'Температура'],
   ['notes', 'Заметки'],
+  ['cams', 'Камеры'],
   ['pocket', 'Карманы'],
 ];
 
@@ -233,6 +236,29 @@ export class Journal {
           { class: 'sheet' },
           h('h3', { text: 'Мои заметки за смену' }),
           st.clues.length ? list : h('p', { class: 'muted-note', text: 'Пока ничего. Смотрите внимательнее: на покупателей, на камеры, на бумаги.' }),
+        );
+      }
+      case 'cams': {
+        s.act('journal:cams');
+        const list = h('ul', { class: 'notes cam-log' });
+        for (const e of st.anomalies.log) {
+          list.append(
+            h(
+              'li',
+              { class: e.result === 'correct' ? '' : 'struck-entry' },
+              h('span', { class: 'cam-log-head', text: `${formatTime(e.m)} · камера ${e.cam} · ${CATEGORY_LABELS[e.category].toLowerCase()}` }),
+              h('br'),
+              e.text,
+            ),
+          );
+        }
+        return h(
+          'div',
+          { class: 'sheet' },
+          h('h3', { text: 'Журнал видеонаблюдения' }),
+          st.anomalies.log.length
+            ? list
+            : h('p', { class: 'muted-note', text: 'Записей нет. Если на камере что-то не так — откройте камеры и нажмите «Зафиксировать».' }),
         );
       }
       case 'pocket': {
@@ -446,17 +472,34 @@ export class CamerasUI {
   private osd: HTMLElement;
   private bar: HTMLElement;
   private nosignal: HTMLElement;
+  private picker: HTMLElement;
   cam: 1 | 2 | 3 | 4 = 1;
   private seconds = 0;
   onSwitch: (cam: 1 | 2 | 3 | 4) => void = () => {};
   onClose: () => void = () => {};
   onPower: (on: boolean) => void = () => {};
+  onReport: (category: AnomalyCategory) => void = () => {};
+  /** Игрок выбирает, что именно не так на камере. */
+  picking = false;
 
   constructor(private session: () => GameSession) {
     this.osd = h('div', { class: 'osd' });
     this.bar = h('div', { class: 'bar' });
     this.nosignal = h('div', { class: 'nosignal', text: 'НЕТ СИГНАЛА' });
-    this.el = h('div', { class: 'cctv-ui' }, this.osd, this.nosignal, this.bar);
+    this.picker = h('div', { class: 'cam-picker' });
+    this.el = h('div', { class: 'cctv-ui' }, this.osd, this.nosignal, this.picker, this.bar);
+  }
+
+  /** Выбор категории (кнопкой или цифрой 1–4, пока открыт выбор). */
+  pick(category: AnomalyCategory): void {
+    this.picking = false;
+    this.onReport(category);
+    this.render();
+  }
+
+  pickIndex(i: number): void {
+    const cat = (Object.keys(CATEGORY_LABELS) as AnomalyCategory[])[i];
+    if (cat) this.pick(cat);
   }
 
   get isOpen(): boolean {
@@ -486,7 +529,40 @@ export class CamerasUI {
         }),
       );
     }
+    const session = this.session();
+    if (session.anomalies) {
+      const unavailable = this.cam === 4 && !s.cam4On;
+      const ready = session.canReport() && !unavailable;
+      this.bar.append(
+        h('button', {
+          class: `cam-btn report${this.picking ? ' active' : ''}`,
+          type: 'button',
+          text: ready ? '✎ Зафиксировать' : '✎ Журнал занят…',
+          disabled: !ready,
+          onclick: () => {
+            this.picking = !this.picking;
+            this.render();
+          },
+        }),
+      );
+    }
     this.bar.append(h('button', { class: 'cam-btn', type: 'button', text: '✕ Закрыть', onclick: () => this.onClose() }));
+    clear(this.picker);
+    this.picker.style.display = this.picking ? '' : 'none';
+    if (this.picking) {
+      this.picker.append(h('div', { class: 'picker-title', text: `Камера ${this.cam}: что не так?` }));
+      (Object.keys(CATEGORY_LABELS) as AnomalyCategory[]).forEach((cat, i) => {
+        this.picker.append(
+          h('button', {
+            class: 'cam-btn',
+            type: 'button',
+            text: `${i + 1}. ${CATEGORY_LABELS[cat]}`,
+            onclick: () => this.pick(cat),
+          }),
+        );
+      });
+      this.picker.append(h('button', { class: 'cam-btn', type: 'button', text: 'Отмена', onclick: () => ((this.picking = false), this.render()) }));
+    }
     this.nosignal.style.display = this.cam === 4 && !s.cam4On ? '' : 'none';
     this.updateOsd();
   }
@@ -498,7 +574,9 @@ export class CamerasUI {
 
   private updateOsd(): void {
     const s = this.session().state;
-    const t = `${formatTime(s.minutes)}:${String(Math.floor(this.seconds)).padStart(2, '0')}`;
+    // Аномалия может подменить время на одной из камер.
+    const fake = this.session().anomalyOsd(this.cam);
+    const t = fake ? `${fake}:00` : `${formatTime(s.minutes)}:${String(Math.floor(this.seconds)).padStart(2, '0')}`;
     clear(this.osd);
     this.osd.append(
       `CAM 0${this.cam} · ${CAM_NAMES[this.cam]}`,

@@ -5,6 +5,7 @@
 import { add, clue, door, fx, hasItem, hint, narr, set, violate, when } from '../../core/dsl';
 import type { Beat, CameraEvent, ContactDef, EndingDef, ShiftDef, TaskDef, Trigger, WorldState } from '../../core/types';
 import { ambient } from './ambient';
+import { anomalies } from './anomalies';
 import { scenes } from './scenes';
 import { cold, dread, temperature } from './threat';
 import { characters, clues, journal, papers, products, speakers } from './world';
@@ -442,6 +443,7 @@ export const shift1: ShiftDef = {
   temperature,
   dread,
   ambient,
+  anomalies,
   finalBeat: 'morning',
   cameraVisuals,
   onHourEnd(s, hour, ctx) {

@@ -12,12 +12,16 @@
  *
  * Режиссёр не меняет скрытые параметры игрока: фоновые события сами по себе
  * не ведут к плохой концовке.
+ *
+ * Он же решает, когда на камерах появляться аномалиям (AnomalySystem): по тому же seed,
+ * в свободные от сюжета минуты и не в ту же минуту, что фоновое событие.
  */
+import type { AnomalyHost, AnomalySystem } from './Anomalies';
 import { rand, randInt } from './random';
 import { parseTime } from './state';
 import type { AmbientConfig, AmbientEventDef, Step, WorldState } from './types';
 
-export interface DirectorHost {
+export interface DirectorHost extends AnomalyHost {
   state: WorldState;
   /** Идёт сюжетная сцена (диалог, звонок, касса). */
   busy: boolean;
@@ -41,7 +45,10 @@ interface Prepared extends AmbientEventDef {
 export class TensionDirector {
   private events: Prepared[];
 
-  constructor(private config: AmbientConfig) {
+  constructor(
+    private config: AmbientConfig,
+    readonly anomalies: AnomalySystem | null = null,
+  ) {
     this.events = config.events.map((e) => ({
       ...e,
       fromMin: e.from ? parseTime(e.from) : 0,
@@ -55,9 +62,16 @@ export class TensionDirector {
 
   /**
    * Вызывается раз в игровую минуту (только когда часы идут — то есть не на паузе и не после концовки).
-   * Возвращает id сработавшего события или null.
+   * Возвращает id сработавшего фонового события или null.
    */
   onMinute(host: DirectorHost): string | null {
+    this.anomalies?.update(host);
+    const fired = this.ambientMinute(host);
+    if (!fired && this.anomalies) this.anomalies.trySpawn(host, this.config.sceneMargin, this.dread);
+    return fired;
+  }
+
+  private ambientMinute(host: DirectorHost): string | null {
     const s = host.state;
     const a = s.ambient;
     const m = s.minutes;

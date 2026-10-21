@@ -1192,6 +1192,59 @@ button {
   color: #f2c4bd;
 }
 
+/* фиксация наблюдения */
+.cam-btn.report {
+  border-color: #6a6a3a;
+  color: #f0e6b8;
+}
+
+.cam-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cctv-ui .cam-picker {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0.7em;
+  background: rgba(4, 10, 8, 0.9);
+  border: 1px solid #2f5a46;
+  border-radius: 6px;
+  max-width: calc(100% - 16px);
+  z-index: 2;
+}
+
+.cam-picker .picker-title {
+  color: #dff7ea;
+  font-size: 0.95em;
+  margin-bottom: 0.2em;
+}
+
+.cam-picker .cam-btn {
+  text-align: left;
+}
+
+.cam-log .cam-log-head {
+  font-family: var(--font-mono);
+  font-size: 0.6em;
+  color: #5a5448;
+}
+
+.cam-log .struck-entry {
+  color: #6b6f84;
+  text-decoration: line-through;
+  text-decoration-color: rgba(31, 43, 90, 0.45);
+}
+
+.cam-log .struck-entry .cam-log-head {
+  text-decoration: none;
+}
+
 .cctv-ui .nosignal {
   position: absolute;
   inset: 0;

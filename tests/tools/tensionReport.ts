@@ -3,7 +3,17 @@
  * паузы, первый минус. Используется тестами (tests/tension.test.ts) и скриптом отчёта.
  */
 import { shift1 } from '../../src/content/shift1';
-import { cautiousPolicy, randomPolicy, riskyPolicy, rulesPolicy, simulate, watcherPolicy, type Policy, type SimResult } from '../sim';
+import {
+  cautiousPolicy,
+  observerPolicy,
+  randomPolicy,
+  riskyPolicy,
+  rulesPolicy,
+  simulate,
+  watcherPolicy,
+  type Policy,
+  type SimResult,
+} from '../sim';
 
 export interface RunStats {
   ending: string | null;
@@ -20,6 +30,10 @@ export interface RunStats {
   log: [string, number][];
   sameInRow: number;
   errors: number;
+  /** Аномалии: сколько появилось, зафиксировано, пропущено, сколько записей в журнале по результатам. */
+  anomalyIds: string[];
+  anomalies: { spawned: number; reported: number; missed: number; vanished: number; correct: number; wrong: number; maxActive: number };
+  clues: number;
 }
 
 export function runStats(r: SimResult): RunStats {
@@ -44,7 +58,20 @@ export function runStats(r: SimResult): RunStats {
   }
   let sameInRow = 0;
   for (let i = 1; i < log.length; i++) if (log[i][0] === log[i - 1][0]) sameInRow++;
+  const an = r.state.anomalies;
+  const outcome = (o: string) => an.outcomes.filter(([, x]) => x === o).length;
   return {
+    anomalyIds: an.spawned.map(([id]) => id),
+    anomalies: {
+      spawned: an.spawned.length,
+      reported: outcome('reported'),
+      missed: outcome('missed'),
+      vanished: outcome('vanished'),
+      correct: an.log.filter((e) => e.result === 'correct').length,
+      wrong: an.log.filter((e) => e.result !== 'correct').length,
+      maxActive: r.maxActiveAnomalies,
+    },
+    clues: r.state.clues.length,
     ending: r.ending,
     events: log.length,
     perHour,
@@ -64,6 +91,8 @@ export const POLICIES: Record<string, () => Policy> = {
   cautious: () => cautiousPolicy(),
   watcher: () => watcherPolicy(),
   risky: () => riskyPolicy(),
+  observer: () => observerPolicy(),
+  observer_cold: () => observerPolicy({ respectCold: false }),
   random: () => randomPolicy,
 };
 
@@ -105,6 +134,16 @@ export function summarize(name: string, rs: RunStats[]): string {
     `первый минус до 05:00: ${negBefore5.length}/${rs.length} прогонов; медиана ${negBefore5.length ? hhmm(pct(negBefore5, 0.5)) : '—'}, раньше всех ${negBefore5.length ? hhmm(Math.min(...negBefore5)) : '—'}`,
     `внимание к концу: среднее ${avg(rs.map((r) => r.attention)).toFixed(1)}`,
     `одинаковых событий подряд: ${rs.reduce((a, r) => a + r.sameInRow, 0)}; ошибок: ${rs.reduce((a, r) => a + r.errors, 0)}`,
+    `аномалий за смену: ${avg(rs.map((r) => r.anomalies.spawned)).toFixed(1)} (мин ${Math.min(...rs.map((r) => r.anomalies.spawned))}, макс ${Math.max(...rs.map((r) => r.anomalies.spawned))}); зафиксировано ${avg(rs.map((r) => r.anomalies.reported)).toFixed(1)}, пропущено ${avg(rs.map((r) => r.anomalies.missed)).toFixed(1)}, исчезли ${avg(rs.map((r) => r.anomalies.vanished)).toFixed(1)}; одновременно — не больше ${Math.max(...rs.map((r) => r.anomalies.maxActive))}`,
+    `журнал камер: верных ${avg(rs.map((r) => r.anomalies.correct)).toFixed(1)}, ложных ${avg(rs.map((r) => r.anomalies.wrong)).toFixed(1)}; улик в среднем ${avg(rs.map((r) => r.clues)).toFixed(1)}`,
+    `аномалии (на прогон): ${(() => {
+      const c: Record<string, number> = {};
+      for (const r of rs) for (const id of r.anomalyIds) c[id] = (c[id] ?? 0) + 1;
+      return Object.entries(c)
+        .sort((a, b) => b[1] - a[1])
+        .map(([id, n]) => `${id} ${(n / rs.length).toFixed(2)}`)
+        .join(', ');
+    })()}`,
     `частота событий (на прогон): ${top}`,
   ].join('\n');
 }

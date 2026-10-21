@@ -1,10 +1,13 @@
 import { EventBus } from './EventBus';
 import type { Presenter, SaleItemView } from './Presenter';
+import { AnomalySystem, type ReportResult } from './Anomalies';
 import { randInt } from './random';
 import { createState, formatTime, parseTime, resolveText, SHIFT_END_MINUTES, upgradeState } from './state';
 import { TensionDirector, type DirectorHost } from './TensionDirector';
 import type {
+  AnomalyCategory,
   Beat,
+  CamId,
   CameraEvent,
   EffectContext,
   ShiftDef,
@@ -50,6 +53,8 @@ export class GameSession {
   private ctx: EffectContext;
   private currentSceneId: string | null = null;
   private director: TensionDirector | null = null;
+  /** Какую камеру игрок смотрит прямо сейчас. */
+  private viewing: CamId | null = null;
   private directorHost: DirectorHost;
 
   constructor(
@@ -60,7 +65,7 @@ export class GameSession {
     this.state = createState(shift, 'Саша', 1);
     this.planBeats();
     if (shift.ambient) {
-      this.director = new TensionDirector(shift.ambient);
+      this.director = new TensionDirector(shift.ambient, shift.anomalies ? new AnomalySystem(shift.anomalies) : null);
       if (shift.dread) this.director.dread = (s) => shift.dread!(s);
     }
     this.camEvents = shift.cameraEvents.map((e) => ({
@@ -84,6 +89,8 @@ export class GameSession {
         return Boolean(self.state.flags.saleActive);
       },
       minutesToNextScene: () => this.minutesToNextScene(),
+      viewingCam: () => this.viewing,
+      camAvailable: (cam) => this.camAvailable(cam),
       beatMinute: (id) => this.beatMinute(id),
       run: (steps) => this.runAmbient(steps),
       toast: (text) => this.bus.emit('toast', { text: resolveText(text, this.state) }),
@@ -146,6 +153,7 @@ export class GameSession {
   /** Полная остановка: прерывает текущую сцену. */
   stop(): void {
     this.runToken++;
+    this.viewing = null;
     this.busy = false;
     this.status = 'idle';
     this.customer = null;
@@ -627,6 +635,7 @@ export class GameSession {
   }
 
   closeCameras(): void {
+    this.viewing = null;
     this.act('cameras:close');
   }
 
@@ -647,29 +656,54 @@ export class GameSession {
         if (ev.onSeen) this.runAmbient(ev.onSeen);
       }
     }
-    const amb = this.ambientCameraVisual(cam);
-    if (amb) {
-      visuals.push(amb);
-      const c = s.ambient.cam!;
-      if (!c.seen) {
-        c.seen = true;
-        if (c.text) this.bus.emit('toast', { text: c.text });
-      }
-    } else if (s.ambient.cam?.seen) {
-      // Увиденный силуэт пропадает, стоит переключиться на другую камеру.
-      s.ambient.cam = null;
-    }
+    this.viewing = cam;
+    this.anomalies?.onView(s, cam);
+    visuals.push(...this.anomalyVisuals(cam));
     this.act(`camera:${cam}`);
     this.bus.emit('state:changed');
     return visuals;
   }
 
-  /** Фоновый силуэт режиссёра тревоги на камере (если он сейчас там). */
-  ambientCameraVisual(cam: number): string | null {
-    const c = this.state.ambient.cam;
-    if (!c || c.cam !== cam) return null;
-    if (this.state.minutes > c.until || this.state.flags.blackout) return null;
-    return c.visual;
+  // ───────────── аномалии на камерах ─────────────
+
+  get anomalies(): AnomalySystem | null {
+    return this.director?.anomalies ?? null;
+  }
+
+  private camAvailable(cam: CamId): boolean {
+    return !this.state.flags.blackout && (cam !== 4 || this.state.cam4On);
+  }
+
+  /** Визуальные ключи аномалий на камере (для экрана камер). */
+  anomalyVisuals(cam: CamId): string[] {
+    if (!this.anomalies || !this.camAvailable(cam)) return [];
+    return this.anomalies.visuals(this.state, cam);
+  }
+
+  /** Подменённое время в углу экрана камеры. */
+  anomalyOsd(cam: CamId): string | null {
+    if (!this.anomalies || !this.camAvailable(cam)) return null;
+    return this.anomalies.osd(this.state, cam);
+  }
+
+  /** Можно ли сейчас сделать запись в журнал наблюдений. */
+  canReport(): boolean {
+    return this.status === 'running' && !!this.anomalies && this.state.minutes >= this.state.anomalies.reportUntil;
+  }
+
+  /** Игрок фиксирует наблюдение на камере. */
+  reportAnomaly(cam: CamId, category: AnomalyCategory): ReportResult {
+    if (this.status !== 'running' || !this.anomalies) return { result: 'busy', text: '' };
+    const customer = this.customer?.id ?? null;
+    const sceneVisuals = [
+      ...this.shift.cameraVisuals(cam, this.state, customer),
+      ...this.visibleCameraEvents(cam).map((e) => e.visual),
+    ];
+    const res = this.anomalies.report(this.directorHost, cam, category, sceneVisuals);
+    if (res.text) this.bus.emit('toast', { text: res.text });
+    if (res.result !== 'busy' && res.result !== 'duplicate') this.bus.emit('journal:new', { tab: 'cams' });
+    this.bus.emit('state:changed');
+    return res;
   }
 
   /** Обход камер привязан к часу: 02:00–02:59 → '2', 04:00–04:59 → '4'. */

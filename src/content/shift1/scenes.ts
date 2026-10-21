@@ -551,7 +551,10 @@ export const scenes: Record<string, Step[]> = {
             narr('Стук обрывается на середине.'),
             fx(set('deliveryRefused'), add('attention', -1)),
           ],
-          { tone: 'insight', if: any(hasClue('gp_verified'), hasClue('liza_truck'), hasClue('door_nobody')) },
+          {
+            tone: 'insight',
+            if: any(hasClue('gp_verified'), hasClue('liza_truck'), hasClue('door_nobody'), hasClue('truck_cam')),
+          },
         ),
         opt('Не открывать', [
           knock(2),
@@ -1060,6 +1063,14 @@ export const scenes: Record<string, Step[]> = {
     ]),
     when((s) => Number(s.flags.roundsMissed ?? 0) >= 1, [say('gp', 'Обход по камерам — тоже не для галочки.')]),
     when(stat('neglect', '>=', 1), [say('gp', 'Люди уходили без покупок. Это магазин, а не музей.')]),
+    // Журнал видеонаблюдения: Г. П. его читает, но за него не наказывает.
+    when((s) => s.anomalies.log.filter((e) => e.result === 'correct').length >= 4, [
+      narr('Галина Петровна листает журнал видеонаблюдения. На одной странице задерживается дольше, чем на остальных.'),
+      say('gp', 'Это… Ладно. Костя тоже всё записывал.'),
+    ]),
+    when((s) => s.anomalies.log.filter((e) => e.result !== 'correct').length >= 4, [
+      say('gp', 'И журнал камер — не дневник. Половина записей — собачники и пакеты.'),
+    ]),
     when(flag('answeredLine2'), [
       say('gp', 'Вторая линия. Входящие — приняты.'),
       narr('Она долго смотрит на вас.'),

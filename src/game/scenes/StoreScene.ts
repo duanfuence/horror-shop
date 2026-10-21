@@ -155,7 +155,7 @@ export class StoreScene extends Phaser.Scene {
       const [x, y, w, h] = hs.rect;
       const zone = this.add.zone(x, y, w, h).setOrigin(0).setDepth(50).setInteractive({ useHandCursor: true });
       zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
-        if (this.mode !== 'game') return;
+        if (this.mode !== 'game' || !this.onCanvas(p)) return;
         this.deps.onHover(null);
         this.deps.onHotspot(hs.id, p.x, p.y);
       });
@@ -164,11 +164,21 @@ export class StoreScene extends Phaser.Scene {
     }
     this.customerZone = this.add.zone(CUSTOMER_X - 34, 47, 68, 99).setOrigin(0).setDepth(60);
     this.customerZone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (!this.onCanvas(p)) return;
       this.deps.onHover(null);
       this.deps.onHotspot('customer', p.x, p.y);
     });
     this.customerZone.on('pointerover', () => this.deps.onHover('Рассмотреть', CUSTOMER_X, 50));
     this.customerZone.on('pointerout', () => this.deps.onHover(null));
+  }
+
+  /**
+   * Нажатие пришло на сам холст, а не на кнопку интерфейса поверх него.
+   * На сенсорных экранах Phaser слушает касания всего окна, и без этой проверки
+   * касание кнопки камер «проваливалось» в зону телефона или монитора под ней.
+   */
+  private onCanvas(p: Phaser.Input.Pointer): boolean {
+    return !p.downElement || p.downElement === this.game.canvas;
   }
 
   // ═══════════════ события ═══════════════

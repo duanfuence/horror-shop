@@ -14,26 +14,6 @@ import { temperature } from './threat';
 const noCustomer = (s: WorldState) => !s.flags.customer;
 const threatening = (s: WorldState) => temperature(s) < 0 || s.stats.attention >= 4;
 
-/**
- * Окна сюжетных аномалий на камерах: в них фоновый силуэт не появляется,
- * чтобы не спорить с сюжетом (жилет на камере 1, человек на стоянке на камере 2).
- */
-const STORY_CAM_WINDOWS: Record<1 | 2, [number, number][]> = {
-  1: [[36, 58]],
-  2: [[126, 143]],
-};
-
-const CAM_SILHOUETTES: Record<1 | 2, { visual: string; text: string }[]> = {
-  1: [
-    { visual: 'amb_aisle', text: 'Камера 1: в дальнем конце прохода кто-то стоит. Тёмный, неподвижный. В зале — никого.' },
-    { visual: 'amb_aisle', text: 'Камера 1: у стеллажа с крупами — фигура. Лица не видно, только плечи.' },
-  ],
-  2: [
-    { visual: 'amb_lot', text: 'Камера 2: за краем стоянки, у деревьев, кто-то стоит лицом к магазину.' },
-    { visual: 'amb_lot', text: 'Камера 2: на дальнем краю стоянки — силуэт. Не курит, не звонит. Просто стоит.' },
-  ],
-};
-
 export const ambientEvents: AmbientEventDef[] = [
   // ─────────── атмосфера ───────────
   {
@@ -270,30 +250,6 @@ export const ambientEvents: AmbientEventDef[] = [
     texts: ['В пустом зале — шаги. Три. И тишина.'],
     textChance: 0.6,
   },
-  {
-    id: 'cam_silhouette',
-    weight: 0.8,
-    intensity: 2,
-    channel: 'monitor',
-    from: '01:10',
-    to: '04:50',
-    cooldown: 50,
-    max: 2,
-    onFire: (s, rnd) => {
-      const m = s.minutes;
-      const free = ([1, 2] as const).filter((cam) =>
-        STORY_CAM_WINDOWS[cam].every(([a, b]) => m + 8 < a || m > b),
-      );
-      if (!free.length) return;
-      const cam = free[Math.floor(rnd('cam') * free.length)];
-      const variants = CAM_SILHOUETTES[cam];
-      const v = variants[Math.floor(rnd('variant') * variants.length)];
-      s.ambient.cam = { cam, visual: v.visual, until: m + 8, seen: false, text: v.text };
-    },
-    // Видно только тому, кто смотрит в камеры. В магазине — лишь короткий треск монитора.
-    steps: [effect('monitor_glitch')],
-  },
-
   // ─────────── прямые намёки на опасность ───────────
   {
     id: 'glass_tap',

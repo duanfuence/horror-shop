@@ -83,10 +83,57 @@ export interface AmbientState {
   lastScene: number;
   /** Временный провал температуры. */
   dip: { value: number; until: number } | null;
-  /** Силуэт на камере, который видно, только если смотреть. */
-  cam: { cam: 1 | 2 | 3 | 4; visual: string; until: number; seen: boolean; text: string } | null;
   /** Упавшая с полки банка лежит на полу до конца смены. */
   floorItem: boolean;
+}
+
+export type CamId = 1 | 2 | 3 | 4;
+
+/** Что игрок может указать при фиксации наблюдения. */
+export type AnomalyCategory = 'person' | 'object' | 'door' | 'image';
+
+/** Аномалия, которая сейчас есть на камере. */
+export interface ActiveAnomaly {
+  id: string;
+  cam: CamId;
+  /** Минута появления. */
+  at: number;
+  /** Текущая стадия (индекс в def.stages). */
+  stage: number;
+  /** Видел ли игрок её хотя бы раз. */
+  seen: boolean;
+}
+
+/** Запись в журнале видеонаблюдения. */
+export interface ObservationEntry {
+  m: number;
+  cam: CamId;
+  category: AnomalyCategory;
+  /** correct — что-то действительно было; mundane — обычная вещь; false — ничего не нашлось. */
+  result: 'correct' | 'mundane' | 'false';
+  /** Что было зафиксировано (id аномалии или визуальный ключ). */
+  ref: string | null;
+  text: string;
+}
+
+/** Состояние аномалий на камерах внутри прохождения. */
+export interface AnomalyState {
+  active: ActiveAnomaly[];
+  /** Минута последнего появления каждой аномалии. */
+  last: Record<string, number>;
+  count: Record<string, number>;
+  /** Журнал появлений [id, камера, минута] — для отчётов и тестов. */
+  spawned: [string, CamId, number][];
+  /** Чем закончилась каждая аномалия: зафиксирована, пропущена, исчезла сама. */
+  outcomes: [string, 'reported' | 'missed' | 'vanished', number][];
+  /** Следы пропущенных аномалий, видимые на камере до конца смены: [id, камера]. */
+  traces: [string, CamId][];
+  /** Журнал наблюдений игрока. */
+  log: ObservationEntry[];
+  /** До какой минуты новые аномалии не появляются. */
+  quietUntil: number;
+  /** До какой минуты журнал наблюдений «занят» (после записи). */
+  reportUntil: number;
 }
 
 export interface WorldState {
@@ -94,6 +141,7 @@ export interface WorldState {
   /** seed прохождения: определяет фоновые события, сдвиги времени и колебания температуры. */
   seed: number;
   ambient: AmbientState;
+  anomalies: AnomalyState;
   shiftId: string;
   playerName: string;
   /** Игровые минуты от 00:00. */
@@ -264,6 +312,69 @@ export interface AmbientConfig {
   sceneMargin: number;
 }
 
+/** Стадия аномалии: с какой минуты после появления и как она выглядит на камере. */
+export interface AnomalyStage {
+  at: number;
+  /**
+   * Визуальные ключи для экрана камеры: 'base:КЛЮЧ' — другая основа кадра, 'ov:КЛЮЧ' — полноэкранный слой,
+   * 'osd:ТЕКСТ' — время в углу экрана, остальное — фигуры/спрайты (см. CctvScene.placementFor).
+   */
+  visuals: string[];
+  /** Что происходит в магазине, когда стадия наступает (звук, эффект). Не подсказка игроку. */
+  steps?: Step[];
+}
+
+/** Аномалия на камере наблюдения: описывается данными, исполняется AnomalySystem. */
+export interface AnomalyDef {
+  id: string;
+  /** Камеры, на которых она может появиться (выбирается по seed среди свободных). */
+  cams: CamId[];
+  /** 0 — обычная вещь (ложная тревога), 1 — странность, 2 — тревожная, 3 — опасная. */
+  danger: 0 | 1 | 2 | 3;
+  /** Какие категории засчитываются при фиксации (для обычных вещей — какие «ловят» игрока). */
+  categories: AnomalyCategory[];
+  weight: number;
+  from?: string;
+  to?: string;
+  /** Сколько минут живёт, если её не зафиксировать. */
+  duration: number;
+  /** Абсолютное время, после которого исчезает в любом случае ('03:40'). */
+  until?: string;
+  cooldown: number;
+  max?: number;
+  when?: (s: WorldState, cam: CamId) => boolean;
+  stages: AnomalyStage[];
+  /** Исчезает, как только игрок увидел её и переключил камеру. */
+  vanishOnSwitch?: boolean;
+  /** Результат фиксации (что игрок узнаёт, проверив). */
+  report: { text: Text; steps?: Step[] };
+  /** Если не зафиксировать до конца: шаги и след, который останется на камере. */
+  miss?: { steps?: Step[]; trace?: string[] };
+}
+
+export interface AnomalyConfig {
+  defs: AnomalyDef[];
+  /** Не больше стольких аномалий одновременно. */
+  maxActive: number;
+  /** Вероятность появления в данную минуту (когда есть свободное место). */
+  rate(s: WorldState): number;
+  /** Пауза после появления, минуты [от, до]. */
+  gap: [number, number];
+  /** Первая аномалия — не раньше. */
+  firstAt: string;
+  /** Последняя — не позже (дальше финал). */
+  lastAt: string;
+  /** Пауза журнала после записи: верной и ошибочной (минуты). */
+  reportCooldown: { correct: number; wrong: number };
+  /**
+   * Что ещё видно на камерах и как это засчитывается при фиксации: сюжетные аномалии (засчитываются),
+   * обычные вещи (ложная тревога с объяснением).
+   */
+  reportables: Record<string, { categories: AnomalyCategory[]; kind: 'strange' | 'mundane'; text: Text }>;
+  /** Ответы, когда на камере ничего такого нет (выбирается по seed). */
+  falseTexts: string[];
+}
+
 /** Аномалия, видимая только на камере в определённое окно времени. */
 export interface CameraEvent {
   id: string;
@@ -398,6 +509,8 @@ export interface ShiftDef {
   dread?(s: WorldState): number;
   /** Режиссёр тревоги: пул фоновых событий и правила их частоты. */
   ambient?: AmbientConfig;
+  /** Аномалии на камерах (их появлением тоже управляет режиссёр). */
+  anomalies?: AnomalyConfig;
   /** Сцена финала, которая гарантированно запускается в 06:00. */
   finalBeat: string;
   journal: JournalContent;

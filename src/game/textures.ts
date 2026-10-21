@@ -39,6 +39,22 @@ export function registerTextures(scene: Phaser.Scene): void {
     add(`cam${i + 1}_s`, downscale(c, 43, 31));
   });
   add('cam4_door', cctv.paintCam4DoorOpen());
+  // аномалии на камерах: другие основы кадра и полноэкранные слои
+  add('cam4_chair_door', cctv.paintCam4('door'));
+  add('cam4_chair_facing', cctv.paintCam4('facing'));
+  add('ov_cam1_fridge1', cctv.paintCam1Fridge(1));
+  add('ov_cam1_fridge2', cctv.paintCam1Fridge(2));
+  add('ov_cam1_shadow', cctv.paintCam1Shadow());
+  add('ov_cam2_truck1', cctv.paintCam2Truck(1));
+  add('ov_cam2_truck2', cctv.paintCam2Truck(2));
+  add('ov_cam3_candle1', cctv.paintCam3Candle(1));
+  add('ov_cam3_candle2', cctv.paintCam3Candle(2));
+  add('ov_cam4_box1', cctv.paintCam4Box(1));
+  add('ov_cam4_box2', cctv.paintCam4Box(2));
+  add('ov_cam4_box3', cctv.paintCam4Box(3));
+  add('ov_cam4_hand', cctv.paintCam4Hand());
+  add('dog', cctv.paintDog());
+  add('top_dark', cctv.paintTopDown('#121212', '#1f2326'));
   add('fig_vest', cctv.paintStanding(64, { vest: true, face: 'away' }));
   add('fig_vest_front', cctv.paintStanding(64, { vest: true, face: 'blank' }));
   add('fig_coat', cctv.paintStanding(64, { coat: true }));

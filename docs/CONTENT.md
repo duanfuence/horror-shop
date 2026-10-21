@@ -97,6 +97,32 @@ my_scene: [
 (незнакомый id просто игнорируется). Фоновые события **не должны менять** `stats`, флаги, улики и нарушения —
 это проверяет tests/tension.test.ts. Сводка по 200 прогонам на стратегию: `npm run report:tension`.
 
+## Аномалии на камерах
+
+Данные — `src/content/shift1/anomalies.ts`, логика — `src/core/Anomalies.ts`, появление решает режиссёр тревоги.
+
+```ts
+{
+  id: 'extra_box', cams: [4], danger: 1, categories: ['object'], weight: 1,
+  from: '00:50', to: '04:20', duration: 24, cooldown: 999, max: 1,
+  when: warm,                                        // (s, cam) => boolean
+  stages: [
+    { at: 0, visuals: ['ov:cam4_box1'] },             // минуты от появления → что видно
+    { at: 8, visuals: ['ov:cam4_box2'] },
+    { at: 16, visuals: ['ov:cam4_box3'], steps: [sfx('thud')] },
+  ],
+  report: { text: 'Записано: …', steps: [fx(clue('…'))] },   // верная фиксация
+  miss: { trace: ['ov:cam4_box3'] },                          // не заметили: след до утра
+}
+```
+
+Визуальные ключи: `ov:КЛЮЧ` — полноэкранный слой (текстура `ov_КЛЮЧ` в src/game/textures.ts, рисуется
+в src/game/art/cctv.ts), `base:КЛЮЧ` — другая основа кадра, `osd:05:58` — время в углу экрана, остальное —
+фигуры (см. `placementFor` в CctvScene). `danger: 0` — обычная вещь, её фиксация — ложная тревога.
+Что ещё на камерах засчитывается при фиксации (сюжетные аномалии) и что считается обычным
+(покупатель, продавец) — `anomalies.reportables`. Тесты: tests/anomalies.test.ts; в браузере —
+`npm run e2e:anomalies` (скриншоты каждой стадии в e2e-output/).
+
 ## Новая смена
 
 1. Скопировать `src/content/shift1` в `src/content/shift2` и изменить данные.

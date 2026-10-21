@@ -273,6 +273,10 @@ export function paintCam2(): HTMLCanvasElement {
   spot('cam2_grey', c, -4.6, 14.5);
   spot('cam2_taxi', c, -1.0, 11.5);
   spot('cam2_amb', c, 0.8, 19);
+  spot('cam2_walk1', c, -1.2, 12.8);
+  spot('cam2_dog1', c, -0.5, 12.6);
+  spot('cam2_walk2', c, 0.4, 13.6);
+  spot('cam2_dog2', c, 1.1, 13.4);
   return finish(pc, 1.25);
 }
 
@@ -304,6 +308,8 @@ export function paintCam3(): HTMLCanvasElement {
   pc.vline(129, 96, 117, '#8c826b');
   SPOTS.cam3_clerk = { x: 150, y: 54, s: 1 };
   SPOTS.cam3_customer = { x: 160, y: 158, s: 1 };
+  SPOTS.cam3_behind1 = { x: 108, y: 30, s: 1 };
+  SPOTS.cam3_behind2 = { x: 146, y: 26, s: 1 };
   return finish(pc);
 }
 
@@ -311,7 +317,10 @@ export function paintCam3(): HTMLCanvasElement {
 
 const cam4 = new Cam3([2.4, 2.6, 0.2], -18, 26, 165);
 
-export function paintCam4(): HTMLCanvasElement {
+/** Где стоит стул Кости с курткой: на месте, у служебной двери, посреди склада лицом к камере. */
+export type ChairPlace = 'home' | 'door' | 'facing';
+
+export function paintCam4(chair: ChairPlace = 'home'): HTMLCanvasElement {
   const pc = new PixelCanvas(CW, CH);
   const c = cam4;
   const rnd = seeded(51);
@@ -403,15 +412,7 @@ export function paintCam4(): HTMLCanvasElement {
     [2.99, 2.1, 2.6],
     [2.99, 2.1, 1.4],
   ], '#4a5550');
-  // стул с курткой
-  c.box(pc, [0.4, 0, 3.2], [0.9, 0.45, 3.7], '#3c3f3d', '#2e312f', '#262826');
-  c.box(pc, [0.4, 0.45, 3.65], [0.9, 1.0, 3.72], '#3c3f3d', '#2e312f', '#262826');
-  c.quad(pc, [
-    [0.35, 0.5, 3.6],
-    [0.95, 0.5, 3.6],
-    [0.95, 1.05, 3.62],
-    [0.35, 1.05, 3.62],
-  ], '#556b5a');
+  drawChair(pc, c, chair);
   // лампочка
   const [lx, ly] = c.p(0, 2.75, 3);
   pc.vline(Math.round(lx), 0, Math.round(ly), '#111');
@@ -422,6 +423,202 @@ export function paintCam4(): HTMLCanvasElement {
   spot('cam4_fig3', c, 1.7, 1.3);
   spot('cam4_door', c, 2.95, 2.0);
   return finish(pc, 1.15);
+}
+
+function drawChair(pc: PixelCanvas, c: Cam3, place: ChairPlace): void {
+  const seat = '#3c3f3d';
+  const front = '#2e312f';
+  const side = '#262826';
+  const jacket = '#556b5a';
+  if (place === 'home') {
+    c.box(pc, [0.4, 0, 3.2], [0.9, 0.45, 3.7], seat, front, side);
+    c.box(pc, [0.4, 0.45, 3.65], [0.9, 1.0, 3.72], seat, front, side);
+    c.quad(pc, [
+      [0.35, 0.5, 3.6],
+      [0.95, 0.5, 3.6],
+      [0.95, 1.05, 3.62],
+      [0.35, 1.05, 3.62],
+    ], jacket);
+    return;
+  }
+  if (place === 'door') {
+    // Стул отодвинут к служебной двери и повёрнут к ней спинкой к залу.
+    c.box(pc, [2.0, 0, 2.75], [2.5, 0.45, 3.25], seat, front, side);
+    c.box(pc, [2.0, 0.45, 2.75], [2.07, 1.0, 3.25], seat, front, side, 'min', 'min');
+    c.quad(pc, [
+      [1.98, 0.5, 2.7],
+      [1.98, 0.5, 3.3],
+      [1.98, 1.05, 3.3],
+      [1.98, 1.05, 2.7],
+    ], jacket);
+    return;
+  }
+  // Стул посреди склада, сиденьем к камере, как будто кто-то сидел и смотрел в объектив.
+  // Куртка лежит на полу там, где стоял стул.
+  c.quad(pc, [
+    [0.3, 0.01, 3.2],
+    [1.0, 0.01, 3.25],
+    [0.95, 0.01, 3.75],
+    [0.35, 0.01, 3.7],
+  ], jacket);
+  c.box(pc, [-0.3, 0, 1.5], [0.2, 0.45, 2.0], seat, front, side);
+  c.box(pc, [-0.3, 0.45, 1.95], [0.2, 1.0, 2.02], seat, front, side);
+}
+
+/** Слой для кадра камеры: прозрачный холст, на котором рисуют в координатах нужной камеры. */
+function layer(draw: (pc: PixelCanvas) => void, contrast = 1.15): HTMLCanvasElement {
+  const pc = new PixelCanvas(CW, CH);
+  draw(pc);
+  return finish(pc, contrast);
+}
+
+// ═══════════════ слои аномалий ═══════════════
+
+/** Камера 1: дверца холодильника приоткрыта (1) или распахнута, по полу стелется холод (2). */
+export function paintCam1Fridge(stage: 1 | 2): HTMLCanvasElement {
+  return layer((pc) => {
+    const c = cam1;
+    const angle = ((stage === 1 ? 22 : 78) * Math.PI) / 180;
+    const w = 0.9;
+    const hinge = 5.0;
+    const fx = 4.79 - w * Math.sin(angle);
+    const fz = hinge + w * Math.cos(angle);
+    // тёмный проём за дверцей
+    c.quad(pc, [
+      [4.785, 0.05, hinge],
+      [4.785, 0.05, 5.9],
+      [4.785, 2.05, 5.9],
+      [4.785, 2.05, hinge],
+    ], (x, y) => (bayer(x, y) < 0.15 ? '#3a4446' : '#161c1e'));
+    // сама дверца: стекло в раме
+    c.quad(pc, [
+      [4.79, 0, hinge],
+      [fx, 0, fz],
+      [fx, 2.1, fz],
+      [4.79, 2.1, hinge],
+    ], (x, y) => (bayer(x, y) < 0.35 ? '#f2fbf8' : '#b9cfcc'));
+    c.line(pc, [fx, 0, fz], [fx, 2.1, fz], '#5c6863');
+    c.line(pc, [4.79, 2.1, hinge], [fx, 2.1, fz], '#5c6863');
+    if (stage === 2) {
+      // холодный пар по полу
+      const [cx, cy] = c.p(4.1, 0, 5.5);
+      pc.ellipse(cx, cy, 30, 9, (x, y) => (bayer(x, y) < 0.32 ? '#e6f0ee' : null));
+      pc.ellipse(cx - 6, cy + 4, 20, 5, (x, y) => (bayer(x, y) < 0.22 ? '#dfe9e7' : null));
+    }
+  });
+}
+
+/** Камера 1: на полу лежит тень человека. Того, кто её отбрасывает, в кадре нет. */
+export function paintCam1Shadow(): HTMLCanvasElement {
+  return layer((pc) => {
+    const c = cam1;
+    const shade = (x: number, y: number) => (bayer(x, y) < 0.62 ? '#3a433e' : null);
+    // Ноги — у холодильников, тень тянется через проход к прилавку.
+    const F: V3 = [3.5, 0.01, 5.0];
+    const d: V3 = [-0.55, 0, -0.84];
+    const n: V3 = [0.84, 0, -0.55];
+    const at = (k: number, w: number): [number, number] => {
+      const [x, y] = c.p(F[0] + d[0] * k + n[0] * w, 0.01, F[2] + d[2] * k + n[2] * w);
+      return [x, y];
+    };
+    pc.poly([at(0, -0.08), at(0, 0.08), at(0.75, 0.13), at(1.45, 0.24), at(1.5, -0.24), at(0.75, -0.13)], shade);
+    const [hx, hy, hz] = c.p(F[0] + d[0] * 1.72, 0.01, F[2] + d[2] * 1.72);
+    const r = (c.f / hz) * 0.17;
+    pc.ellipse(hx, hy, r, r * 0.8, shade);
+  });
+}
+
+/** Камера 2: фургон хлебозавода на стоянке. 2 — фары горят, стекло кабины белое от инея. */
+export function paintCam2Truck(stage: 1 | 2): HTMLCanvasElement {
+  return layer((pc) => {
+    const c = cam2;
+    const x0 = -8.6;
+    const x1 = -6.6;
+    // кузов и кабина (кабина ближе к магазину)
+    c.box(pc, [x0, 0.45, 15.4], [x1, 2.7, 20.4], '#c9cfcc', '#a9b0ad', '#8e9592', 'min', 'max');
+    c.box(pc, [x0 + 0.1, 0.45, 14.0], [x1 - 0.1, 1.9, 15.4], '#9da5a2', '#7c8481', '#6a716e', 'min', 'max');
+    // стекло кабины
+    c.quad(pc, [
+      [x0 + 0.25, 1.25, 13.99],
+      [x1 - 0.25, 1.25, 13.99],
+      [x1 - 0.25, 1.8, 13.99],
+      [x0 + 0.25, 1.8, 13.99],
+    ], stage === 2 ? (x, y) => (bayer(x, y) < 0.6 ? '#eef4f2' : '#c5cdca') : '#1c2226');
+    // колёса
+    for (const z of [14.7, 19.4]) {
+      c.box(pc, [x1 - 0.1, 0, z - 0.4], [x1 + 0.02, 0.55, z + 0.4], '#111416', '#0c0e10', '#0c0e10', 'min', 'max');
+    }
+    if (stage === 2) {
+      for (const x of [x0 + 0.35, x1 - 0.35]) {
+        const [lx, ly] = c.p(x, 0.75, 13.98);
+        pc.ellipse(lx, ly, 2, 1.5, '#ffffff');
+      }
+      // свет фар на асфальте
+      c.quad(pc, [
+        [x0 + 0.1, 0.02, 13.9],
+        [x1 - 0.1, 0.02, 13.9],
+        [x1 + 0.6, 0.02, 11.2],
+        [x0 - 0.6, 0.02, 11.2],
+      ], (x, y) => (bayer(x, y) < 0.35 ? '#c9d0cb' : null));
+    }
+  });
+}
+
+/** Камера 3: на прилавке свеча и спички (2 — свеча горит). */
+export function paintCam3Candle(stage: 1 | 2): HTMLCanvasElement {
+  return layer((pc) => {
+    const x = 188;
+    const y = 96;
+    if (stage === 2) pc.ellipse(x, y, 11, 9, (px, py) => (bayer(px, py) < 0.28 ? '#f4f0dc' : null));
+    pc.ellipse(x, y, 3, 3, '#e8e2cc');
+    pc.px(x, y, '#3a3026');
+    pc.rect(x + 7, y + 2, 7, 4, '#7a5a3a');
+    pc.hline(x + 7, x + 13, y + 2, '#a8865c');
+    if (stage === 2) {
+      pc.px(x, y - 1, '#ffffff');
+      pc.px(x, y, '#fffbe8');
+    }
+  }, 1.1);
+}
+
+/** Камера 4: лишняя коробка. 1 — на полу у стеллажа, 2 — ближе к камере, 3 — под самым потолком. */
+export function paintCam4Box(stage: 1 | 2 | 3): HTMLCanvasElement {
+  return layer((pc) => {
+    const c = cam4;
+    const top = '#b9a07a';
+    const front = '#95805e';
+    const side = '#7a6849';
+    if (stage === 1) c.box(pc, [-1.2, 0, 4.4], [-0.6, 0.48, 4.95], top, front, side);
+    if (stage === 2) c.box(pc, [0.95, 0, 1.75], [1.5, 0.48, 2.3], top, front, side);
+    if (stage === 3) {
+      // Перевёрнутая коробка прижата к потолку. Ничто её не держит.
+      c.box(pc, [-0.7, 2.3, 3.4], [-0.1, 2.78, 3.95], side, front, top);
+      const [sx, sy] = c.p(-0.4, 0, 3.7);
+      pc.ellipse(sx, sy, 8, 2, (x, y) => (bayer(x, y) < 0.5 ? '#2a2e2c' : null));
+    }
+  });
+}
+
+/** Камера 4: отпечаток ладони в инее на объективе — изнутри. */
+export function paintCam4Hand(): HTMLCanvasElement {
+  return layer((pc) => {
+    const cx = 132;
+    const cy = 92;
+    const frost = (x: number, y: number) => (bayer(x, y) < 0.35 ? '#dfeae6' : null);
+    // лёгкий иней вокруг и отпечаток ладони, проступающий сквозь него
+    pc.ellipse(cx, cy, 46, 40, (x, y) => (bayer(x, y) < 0.1 ? '#d6e2de' : null));
+    pc.ellipse(cx, cy + 6, 13, 15, frost);
+    const fingers: [number, number, number][] = [
+      [-11, -14, 12],
+      [-4, -19, 15],
+      [4, -19, 15],
+      [11, -14, 12],
+      [17, 2, 9],
+    ];
+    for (const [dx, dy, len] of fingers) {
+      pc.ellipse(cx + dx, cy + dy, 2.2, len / 2, frost);
+    }
+  }, 1.0);
 }
 
 /** Пятно света из открытой служебной двери. */
@@ -505,6 +702,19 @@ export function paintCloseFace(): HTMLCanvasElement {
   pc.hline(46, 74, 88, '#3a2a28');
   pc.ellipse(60, 20, 46, 18, '#1d1a18');
   return finish(pc);
+}
+
+/** Собака на поводке (камера над стоянкой). */
+export function paintDog(): HTMLCanvasElement {
+  const pc = new PixelCanvas(16, 10);
+  pc.rect(3, 3, 9, 4, '#4a4440');
+  pc.rect(11, 1, 4, 3, '#4a4440');
+  pc.px(15, 2, '#4a4440');
+  pc.rect(3, 7, 1, 3, '#2c2826');
+  pc.rect(10, 7, 1, 3, '#2c2826');
+  pc.line(2, 3, 0, 1, '#4a4440');
+  pc.outline('#0b0d0c');
+  return finish(pc, 1.1);
 }
 
 export function paintTaxi(): HTMLCanvasElement {

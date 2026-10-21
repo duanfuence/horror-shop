@@ -104,6 +104,10 @@ export class UI implements Presenter {
     this.cams = new CamerasUI(() => this.session);
     this.cams.onSwitch = (cam) => this.switchCam(cam);
     this.cams.onClose = () => this.closeCameras();
+    this.cams.onReport = (category) => {
+      this.session.reportAnomaly(this.cams.cam, category);
+      this.audio.play('page');
+    };
     this.cams.onPower = (on) => {
       this.session.setCam4(on);
       this.audio.play('click');
@@ -122,6 +126,10 @@ export class UI implements Presenter {
     bus.on('toast', ({ text }) => this.hud.toast(text));
     bus.on('paper', (view) => this.paper.show(view));
     bus.on('sfx', ({ id }) => this.audio.play(id));
+    // Журнал наблюдений освобождается со временем — обновить кнопку «Зафиксировать».
+    bus.on('clock:minute', () => {
+      if (this.cams.isOpen && !this.cams.picking) this.cams.render();
+    });
     bus.on('journal:new', ({ tab }) => {
       this.journal.markNew(tab);
       this.refreshHud();
@@ -413,6 +421,8 @@ export class UI implements Presenter {
 
   onHotspot(id: HotspotId, gx: number, gy: number): void {
     if (this.mode !== 'game' || this.session.status !== 'running') return;
+    // Пока открыты камеры, магазин под ними не нажимается.
+    if (this.cams?.isOpen) return;
     this.audio.unlock();
     switch (id) {
       case 'fridge':
@@ -468,6 +478,7 @@ export class UI implements Presenter {
 
   private switchCam(cam: 1 | 2 | 3 | 4): void {
     this.lastCam = cam;
+    this.cams.picking = false;
     this.cams.cam = cam;
     this.session.viewCamera(cam);
     this.stage.openCctv(cam);
@@ -540,7 +551,14 @@ export class UI implements Presenter {
     if (this.mode !== 'game' || this.session.status !== 'running' || this.modals.openId === 'pause') return;
     const digit = /^Digit([1-9])$/.exec(code) ?? /^Numpad([1-9])$/.exec(code);
     if (this.cams.isOpen && !this.modals.openId) {
-      if (digit && Number(digit[1]) <= 4) return this.switchCam(Number(digit[1]) as 1 | 2 | 3 | 4);
+      if (digit && Number(digit[1]) <= 4) {
+        if (this.cams.picking) return this.cams.pickIndex(Number(digit[1]) - 1);
+        return this.switchCam(Number(digit[1]) as 1 | 2 | 3 | 4);
+      }
+      if (code === 'KeyF' && this.session.canReport()) {
+        this.cams.picking = !this.cams.picking;
+        return this.cams.render();
+      }
       if (code === 'ArrowRight') return this.switchCam((((this.cams.cam % 4) + 1) as 1 | 2 | 3 | 4));
       if (code === 'ArrowLeft') return this.switchCam(((((this.cams.cam + 2) % 4) + 1) as 1 | 2 | 3 | 4));
       if (code === 'KeyC') return this.closeCameras();

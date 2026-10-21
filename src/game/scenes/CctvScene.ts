@@ -8,6 +8,7 @@ interface Placement {
   spot: string;
   meters?: number;
   px?: number;
+  alpha?: number;
 }
 
 const CUSTOMER_FIG: Record<string, string> = {
@@ -43,6 +44,23 @@ function placementFor(cam: number, visual: string): Placement | null {
       return { key: 'fig_storage', spot: 'cam4_fig2', meters: 1.75 };
     case '4:waving':
       return { key: 'fig_wave', spot: 'cam4_fig3', meters: 1.75 };
+    // аномалии (src/content/shift1/anomalies.ts)
+    case '1:clerk_facing':
+      return { key: 'fig_storage', spot: 'cam1_clerk', meters: 1.75 };
+    case '2:walker1':
+      return { key: 'fig_jacket', spot: 'cam2_walk1', meters: 1.75 };
+    case '2:dog1':
+      return { key: 'dog', spot: 'cam2_dog1', meters: 0.45 };
+    case '2:walker2':
+      return { key: 'fig_jacket', spot: 'cam2_walk2', meters: 1.75 };
+    case '2:dog2':
+      return { key: 'dog', spot: 'cam2_dog2', meters: 0.45 };
+    case '3:behind1':
+      return { key: 'top_dark', spot: 'cam3_behind1', px: 40, alpha: 0.85 };
+    case '3:behind2':
+      return { key: 'top_dark', spot: 'cam3_behind2', px: 40, alpha: 0.9 };
+    case '4:door_figure':
+      return { key: 'fig_vest_front', spot: 'cam4_door', meters: 1.75, alpha: 0.8 };
     // фоновые силуэты режиссёра тревоги
     case '1:amb_aisle':
       return { key: 'fig_dark', spot: 'cam1_amb', meters: 1.8 };
@@ -105,19 +123,23 @@ export class CctvScene extends Phaser.Scene {
       ...session.shift.cameraVisuals(this.cam, s, customer),
       ...session.visibleCameraEvents(this.cam).map((e) => e.visual),
     ];
-    const amb = session.ambientCameraVisual(this.cam);
-    if (amb) visuals.push(amb);
+    visuals.push(...session.anomalyVisuals(this.cam));
     const key = `${this.cam}|${visuals.join(',')}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
     const off = visuals.includes('off');
-    this.base.setTexture(`cam${this.cam}`).setVisible(!off);
+    // Аномалия может подменить сам кадр (например, стул на складе стоит в другом месте).
+    const baseOverride = visuals.find((v) => v.startsWith('base:'));
+    this.base.setTexture(baseOverride ? baseOverride.slice(5) : `cam${this.cam}`).setVisible(!off);
     this.overlay.removeAll(true);
     this.darkRect.setVisible(visuals.includes('dark'));
     this.frost.setAlpha(visuals.includes('frost') ? 0.55 : 0);
     if (off) return;
     if (this.cam === 4 && visuals.includes('door_open')) this.overlay.add(this.add.image(0, 0, 'cam4_door').setOrigin(0));
-    const hideClerk = visuals.includes('no_clerk');
+    for (const v of visuals) {
+      if (v.startsWith('ov:')) this.overlay.add(this.add.image(0, 0, `ov_${v.slice(3)}`).setOrigin(0));
+    }
+    const hideClerk = visuals.includes('no_clerk') || visuals.includes('clerk_facing');
     for (const v of visuals) {
       if (v === 'clerk' && hideClerk) continue;
       if (this.cam === 4 && v === 'figure3') {
@@ -131,6 +153,7 @@ export class CctvScene extends Phaser.Scene {
       const targetH = p.px ?? (p.meters ?? 1.75) * spot.s;
       img.setScale(targetH / img.height);
       if (p.key.startsWith('top_')) img.setOrigin(0.5, 0.5);
+      if (p.alpha !== undefined) img.setAlpha(p.alpha);
       this.overlay.add(img);
     }
   }

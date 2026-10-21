@@ -209,6 +209,10 @@ export function resultsScreen(opts: {
         stat(String(served), plural(served, 'покупатель обслужен', 'покупателя обслужено', 'покупателей обслужено')),
         stat(String(state.violations.length), plural(state.violations.length, 'нарушение памятки', 'нарушения памятки', 'нарушений памятки')),
         stat(`${state.clues.length} / ${opts.totalClues}`, 'замечено странностей'),
+        stat(
+          String(state.anomalies.log.filter((e) => e.result === 'correct').length),
+          'записей в журнале камер',
+        ),
         stat(`${realMin} мин`, 'длилась смена'),
       ),
       h('div', { class: 'kicker', text: 'Концовки' }),

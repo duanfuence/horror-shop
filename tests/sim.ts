@@ -39,6 +39,10 @@ export interface SimResult {
   temps: number[];
   /** События шины 'fx' и 'ambient', как их видят сцена и звук. */
   fxLog: [string, number][];
+  /** Наибольшее число одновременно активных аномалий за смену. */
+  maxActiveAnomalies: number;
+  /** Сколько раз на одной камере оказывалось больше одной аномалии (должно быть 0). */
+  sameCamAnomalies: number;
 }
 
 const flush = () => new Promise<void>((r) => setImmediate(r));
@@ -104,8 +108,16 @@ export async function simulate(
       }
     }
   });
+  let maxActiveAnomalies = 0;
   bus.on('clock:minute', ({ minutes }) => {
     temps[minutes] = session.temperature();
+  });
+  let sameCamAnomalies = 0;
+  bus.on('state:changed', () => {
+    if (!session) return;
+    const active = session.state.anomalies.active;
+    maxActiveAnomalies = Math.max(maxActiveAnomalies, active.length);
+    if (new Set(active.map((a) => a.cam)).size !== active.length) sameCamAnomalies++;
   });
   try {
     session = new GameSession(shift, bus, presenter);
@@ -133,6 +145,8 @@ export async function simulate(
     sceneLog,
     temps,
     fxLog,
+    maxActiveAnomalies,
+    sameCamAnomalies,
   };
 }
 
@@ -178,6 +192,15 @@ export const randomPolicy: Policy = {
     } else if (r < 0.135) session.act('journal:old');
     else if (r < 0.14) session.act('journal:back');
     else if (r < 0.145) session.act('inspect:photo');
+    else if (r < 0.155) {
+      // случайная фиксация «наугад» — проверяет, что ложные записи ничего не ломают
+      const cats = ['person', 'object', 'door', 'image'] as const;
+      const cam = (1 + Math.floor(rng() * 4)) as 1 | 2 | 3 | 4;
+      session.openCameras();
+      session.viewCamera(cam);
+      session.reportAnomaly(cam, cats[Math.floor(rng() * cats.length)]);
+      session.closeCameras();
+    }
   },
 };
 
@@ -369,6 +392,40 @@ export function watcherPolicy(): Policy {
         for (const cam of [1, 2, 3, 4] as const) session.viewCamera(cam);
         session.closeCameras();
       }
+    },
+  };
+}
+
+/**
+ * Наблюдатель: работает по правилам и каждые `every` минут просматривает камеры.
+ * Замеченную аномалию фиксирует, верно определяя, что не так, с вероятностью `accuracy`.
+ * respectCold — соблюдать правило Кости и не смотреть в камеру 4 на морозе.
+ */
+export function observerPolicy(opts: { every?: number; accuracy?: number; respectCold?: boolean; extraWants?: string[] } = {}): Policy {
+  const every = opts.every ?? 8;
+  const accuracy = opts.accuracy ?? 0.85;
+  const base = opts.respectCold === false ? rulesPolicy(opts.extraWants) : cautiousPolicy(opts.extraWants);
+  const cats = ['person', 'object', 'door', 'image'] as const;
+  return {
+    ...base,
+    idle(session, rng) {
+      base.idle?.(session, rng);
+      const s = session.state;
+      if (s.minutes % every !== 0 || !session.anomalies) return;
+      session.openCameras();
+      for (const cam of [1, 2, 3, 4] as const) {
+        if (cam === 4 && opts.respectCold !== false && session.temperature() < 0) continue;
+        session.viewCamera(cam);
+        const a = s.anomalies.active.find((x) => x.cam === cam);
+        const def = a && session.anomalies.def(a.id);
+        if (!def || !session.canReport()) continue;
+        // обычные вещи наблюдатель иногда тоже принимает за странность
+        if (def.danger === 0 && rng() < 0.5) continue;
+        const right = rng() < accuracy;
+        const cat = right ? def.categories[0] : cats[Math.floor(rng() * cats.length)];
+        session.reportAnomaly(cam, cat);
+      }
+      session.closeCameras();
     },
   };
 }
