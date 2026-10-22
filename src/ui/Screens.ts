@@ -54,7 +54,7 @@ export function askName(host: ModalHost, initial: string, onStart: (name: string
     'div',
     { class: 'settings' },
     h('label', { class: 'field' }, h('span', { text: 'Как вас зовут? Имя будет на бейдже.' }), input),
-    h('p', { class: 'muted-note', style: 'margin:0', text: 'Ночь с 14 на 15 ноября. Смена — с 00:00 до 06:00 (около 12–15 минут).' }),
+    h('p', { class: 'muted-note', style: 'margin:0', text: 'Ночь с 14 на 15 ноября 2025 года. Смена — с 00:00 до 06:00 (около 12–15 минут).' }),
     h('button', { class: 'btn primary', type: 'button', text: 'Выйти на смену', onclick: go }),
   );
   host.open('name', 'Новая смена', body);

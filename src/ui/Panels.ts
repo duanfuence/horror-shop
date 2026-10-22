@@ -220,7 +220,7 @@ export class Journal {
         return h(
           'div',
           {},
-          h('div', { class: 'sheet' }, h('h3', { text: 'Журнал температуры. 14–15.11' }), table),
+          h('div', { class: 'sheet' }, h('h3', { text: 'Журнал температуры. 14–15.11.25' }), table),
           h('div', { class: 'flip' }, h('button', { class: 'btn', type: 'button', text: 'Листнуть назад: старые записи', onclick: () => ((this.oldPage = true), this.render()) })),
         );
       }
